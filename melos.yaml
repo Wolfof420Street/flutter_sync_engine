@@ -1,0 +1,8 @@
+name: flutter_sync_engine
+packages:
+  - packages/**
+
+command:
+  bootstrap:
+    environment:
+      sdk: ^3.5.0

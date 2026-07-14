@@ -1,0 +1,10 @@
+name: flutter_sync_engine_workspace
+publish_to: none
+environment:
+  sdk: ^3.5.0
+
+workspace:
+  - packages/sync_engine
+
+dev_dependencies:
+  lints: ^5.0.0

@@ -5,6 +5,7 @@ environment:
 
 workspace:
   - packages/sync_engine
+  - packages/sync_engine_generator
 
 dev_dependencies:
   lints: ^5.0.0

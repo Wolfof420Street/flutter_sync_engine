@@ -1,0 +1,19 @@
+name: sync_engine_generator_invalid_id_fixture
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  sync_engine:
+    path: ../../../../sync_engine
+  sync_engine_generator:
+    path: ../../..
+
+dev_dependencies:
+  build_runner: ^2.4.0
+  test: ^1.25.0
+
+dependency_overrides:
+  sync_engine:
+    path: ../../../../sync_engine

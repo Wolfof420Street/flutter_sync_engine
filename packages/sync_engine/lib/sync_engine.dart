@@ -1,6 +1,7 @@
 /// Pure-Dart CRDT primitives for offline-first synchronization.
 library;
 
+export 'src/annotations.dart';
 export 'src/crdt/g_counter.dart';
 export 'src/crdt/g_set.dart';
 export 'src/crdt/lww_register.dart';

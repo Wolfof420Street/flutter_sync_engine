@@ -1,4 +1,8 @@
 include: package:lints/recommended.yaml
 
+analyzer:
+  exclude:
+    - packages/sync_engine_generator/test/fixtures/**
+
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

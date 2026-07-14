@@ -1,0 +1,10 @@
+builders:
+  syncable:
+    import: "package:sync_engine_generator/sync_engine_generator.dart"
+    builder_factories:
+      - syncableBuilder
+    build_extensions:
+      .dart:
+        - .sync.dart
+    auto_apply: all_packages
+    build_to: source

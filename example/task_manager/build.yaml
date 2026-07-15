@@ -1,0 +1,9 @@
+targets:
+  $default:
+    builders:
+      sync_engine_generator|syncable:
+        enabled: true
+        # Scope to the annotated model: the generator's analyzer version does
+        # not yet parse all newer Flutter scaffold syntax in unrelated files.
+        generate_for:
+          - lib/task.dart

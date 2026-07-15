@@ -21,6 +21,10 @@ dev_dependencies:
   build_runner: ^2.4.0
   sqlite3: ^2.4.6
   test: ^1.25.0
+  # Reuses the real @Syncable Task and TaskSyncAdapter emitted by build_runner
+  # for the example app; the convergence test must not use a handwritten adapter.
+  task_manager:
+    path: ../../example/task_manager
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

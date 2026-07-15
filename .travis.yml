@@ -1,0 +1,36 @@
+os: linux
+dist: jammy
+language: minimal
+
+cache:
+  directories:
+    - $HOME/.pub-cache
+    - $HOME/flutter
+
+addons:
+  apt:
+    packages:
+      - libsqlite3-0
+
+before_install:
+  - if [ ! -d "$HOME/flutter/.git" ]; then git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"; fi
+  - export PATH="$HOME/flutter/bin:$PATH"; flutter --version
+
+install:
+  - export PATH="$HOME/flutter/bin:$PATH"; dart pub global activate melos
+  - export PATH="$HOME/flutter/bin:$PATH"; dart pub global run melos bootstrap
+
+script:
+  - export PATH="$HOME/flutter/bin:$PATH"; dart pub global run melos exec --fail-fast -- dart analyze
+  - export PATH="$HOME/flutter/bin:$PATH"; dart pub global run melos exec --fail-fast --ignore=sync_engine_generator -- dart test
+  - |
+      export PATH="$HOME/flutter/bin:$PATH"
+      cd packages/sync_engine_generator
+      for fixture in test/fixtures/good test/fixtures/invalid_id test/fixtures/drift_bootstrap test/fixtures/drift_additive test/fixtures/drift_remove; do
+        (cd "$fixture" && dart pub get)
+      done
+      dart test -r expanded
+  - |
+      export PATH="$HOME/flutter/bin:$PATH"
+      cd example/task_manager
+      RUN_HTTP_INTEGRATION=true flutter test -r expanded

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../crdt/lww_register.dart';
 import '../vector_clock.dart';
 import 'adapter.dart';
 import 'interfaces.dart';
@@ -65,15 +66,25 @@ class SyncEngine {
   Future<void> insert<T>(T entity) async {
     final adapter = _adapterFor<T>();
     final id = adapter.idOf(entity);
-    final previous = await _storage.load<T>(id);
+    final previousState = await _storage.loadStored(adapter.modelType, id);
+    final clock = (previousState?.clock ?? VectorClock()).increment(nodeId);
     final operation = InsertOperation(
       entityType: adapter.entityType,
       entityId: id,
-      vectorClock: VectorClock().increment(nodeId),
+      vectorClock: clock,
+      nodeId: nodeId,
+      fieldMetadata: adapter.fieldMetadataForWrite(
+          entity,
+          previousState?.value as T?,
+          previousState?.fieldMetadata ?? const {},
+          clock,
+          nodeId),
       entity: entity,
     );
-    await _storage.save(id, entity, operation.vectorClock);
-    _rollbacks[operation] = _Rollback<T>(previous, operation.vectorClock);
+    await _storage.saveStored(adapter.modelType, id, entity as Object,
+        operation.vectorClock, nodeId, operation.fieldMetadata);
+    _rollbacks[operation] = _Rollback(
+        previousState, adapter.modelType, operation.vectorClock, nodeId);
     _outbox.queue(operation);
   }
 
@@ -81,29 +92,43 @@ class SyncEngine {
   Future<void> update<T>(T entity) async {
     final adapter = _adapterFor<T>();
     final id = adapter.idOf(entity);
-    final previous = await _storage.load<T>(id);
+    final previousState = await _storage.loadStored(adapter.modelType, id);
+    final clock = (previousState?.clock ?? VectorClock()).increment(nodeId);
     final operation = UpdateOperation(
       entityType: adapter.entityType,
       entityId: id,
-      vectorClock: VectorClock().increment(nodeId),
+      vectorClock: clock,
+      nodeId: nodeId,
+      fieldMetadata: adapter.fieldMetadataForWrite(
+          entity,
+          previousState?.value as T?,
+          previousState?.fieldMetadata ?? const {},
+          clock,
+          nodeId),
       entity: entity,
     );
-    await _storage.save(id, entity, operation.vectorClock);
-    _rollbacks[operation] = _Rollback<T>(previous, operation.vectorClock);
+    await _storage.saveStored(adapter.modelType, id, entity as Object,
+        operation.vectorClock, nodeId, operation.fieldMetadata);
+    _rollbacks[operation] = _Rollback(
+        previousState, adapter.modelType, operation.vectorClock, nodeId);
     _outbox.queue(operation);
   }
 
   /// Writes a local tombstone and queues a delete operation.
   Future<void> delete<T>(String id) async {
     final adapter = _adapterFor<T>();
-    final previous = await _storage.load<T>(id);
+    final previousState = await _storage.loadStored(adapter.modelType, id);
+    final clock = (previousState?.clock ?? VectorClock()).increment(nodeId);
     final operation = DeleteOperation(
       entityType: adapter.entityType,
       entityId: id,
-      vectorClock: VectorClock().increment(nodeId),
+      vectorClock: clock,
+      nodeId: nodeId,
     );
-    await _storage.delete<T>(id);
-    _rollbacks[operation] = _Rollback<T>(previous, operation.vectorClock);
+    await _storage.deleteStored(
+        adapter.modelType, id, operation.vectorClock, nodeId);
+    _rollbacks[operation] = _Rollback(
+        previousState, adapter.modelType, operation.vectorClock, nodeId);
     _outbox.queue(operation);
   }
 
@@ -111,10 +136,14 @@ class SyncEngine {
   Future<void> sync() async {
     final batch = await _transport.pull(lastSyncToken: _lastSyncToken);
     _lastSyncToken = batch.nextSyncToken;
+    for (final operation in batch.operations) {
+      await _applyIncoming(operation);
+    }
     await _outbox.flush(_transport);
     await _processFailures();
     if (_storage case final SyncAcknowledgementStorage acknowledgementStorage) {
-      await acknowledgementStorage.recordAcknowledgements(batch.acknowledgements);
+      await acknowledgementStorage
+          .recordAcknowledgements(batch.acknowledgements);
       await acknowledgementStorage.pruneAcknowledgedFrontiers();
     }
   }
@@ -123,6 +152,93 @@ class SyncEngine {
     final adapter = _adapters[T];
     if (adapter == null) throw UnregisteredSyncTypeError(T);
     return adapter as SyncAdapter<T>;
+  }
+
+  Future<void> _applyIncoming(SyncOperation incoming) async {
+    final adapter = _adapters.values.cast<SyncAdapter<dynamic>?>().firstWhere(
+        (candidate) => candidate?.entityType == incoming.entityType,
+        orElse: () => null);
+    if (adapter == null) throw UnregisteredSyncTypeError(incoming.entityType);
+    final current =
+        await _storage.loadStored(adapter.modelType, incoming.entityId);
+    final incomingIsDelete = incoming is DeleteOperation;
+    if (current == null) {
+      if (incomingIsDelete) {
+        await _storage.deleteStored(adapter.modelType, incoming.entityId,
+            incoming.vectorClock, incoming.nodeId, incoming.fieldMetadata);
+      } else {
+        await _storage.saveStored(
+            adapter.modelType,
+            incoming.entityId,
+            incoming.entity as Object,
+            incoming.vectorClock,
+            incoming.nodeId,
+            incoming.fieldMetadata);
+      }
+      return;
+    }
+    final incomingAfter = incoming.vectorClock.happenedAfter(current.clock);
+    final currentAfter = current.clock.happenedAfter(incoming.vectorClock);
+    final concurrent = incoming.vectorClock.isConcurrent(current.clock);
+    if (incomingIsDelete) {
+      if (!currentAfter) {
+        final clock = concurrent
+            ? current.clock.merge(incoming.vectorClock)
+            : incoming.vectorClock;
+        await _storage.deleteStored(adapter.modelType, incoming.entityId, clock,
+            incoming.nodeId, incoming.fieldMetadata);
+      }
+      return;
+    }
+    if (current.deleted) {
+      // Delete wins concurrent updates; a causally later update may resurrect.
+      if (incomingAfter) {
+        await _storage.saveStored(
+            adapter.modelType,
+            incoming.entityId,
+            incoming.entity as Object,
+            incoming.vectorClock,
+            incoming.nodeId,
+            incoming.fieldMetadata);
+      }
+      return;
+    }
+    if (incomingAfter) {
+      await _storage.saveStored(
+          adapter.modelType,
+          incoming.entityId,
+          incoming.entity as Object,
+          incoming.vectorClock,
+          incoming.nodeId,
+          incoming.fieldMetadata);
+      return;
+    }
+    if (currentAfter) return;
+    if (concurrent) {
+      final merged = adapter.merge(
+          current.value,
+          incoming.entity,
+          current.clock,
+          incoming.vectorClock,
+          current.nodeId,
+          incoming.nodeId,
+          current.fieldMetadata,
+          incoming.fieldMetadata);
+      _conflictController.add(ConflictResolution(
+        operation: incoming,
+        reason:
+            'Concurrent inbound merge for ${incoming.entityType}/${incoming.entityId}; '
+            'field-local conflict strategy selected the persisted winner.',
+        rolledBack: false,
+      ));
+      await _storage.saveStored(
+          adapter.modelType,
+          incoming.entityId,
+          merged.value,
+          current.clock.merge(incoming.vectorClock),
+          LWWRegister.winningNodeId(current.nodeId, incoming.nodeId),
+          merged.fieldMetadata);
+    }
   }
 
   Future<void> _processFailures() async {
@@ -152,17 +268,24 @@ class SyncEngine {
   }
 }
 
-class _Rollback<T> {
-  const _Rollback(this.previous, this.clock);
+class _Rollback {
+  const _Rollback(this.previous, this.modelType, this.failedClock, this.nodeId);
 
-  final T? previous;
-  final VectorClock clock;
+  final SyncStoredEntity<Object?>? previous;
+  final Type modelType;
+  final VectorClock failedClock;
+  final String nodeId;
 
   Future<void> restore(SyncStorage storage, String id) async {
-    if (previous == null) {
-      await storage.delete<T>(id);
+    final state = previous;
+    if (state == null) {
+      await storage.deleteStored(modelType, id, failedClock, nodeId);
+    } else if (state.deleted) {
+      await storage.deleteStored(
+          modelType, id, state.clock, state.nodeId, state.fieldMetadata);
     } else {
-      await storage.save<T>(id, previous as T, clock);
+      await storage.saveStored(modelType, id, state.value!, state.clock,
+          state.nodeId, state.fieldMetadata);
     }
   }
 }

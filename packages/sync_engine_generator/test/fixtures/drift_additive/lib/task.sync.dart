@@ -11,12 +11,14 @@ class TaskSyncModel {
   const TaskSyncModel(
       {required this.vectorClock,
       required this.nodeId,
+      required this.fieldMetadata,
       required this.id,
       required this.title,
       required this.completed});
 
   final VectorClock vectorClock;
   final String nodeId;
+  final Map<String, FieldLwwMetadata> fieldMetadata;
   final String id;
   final String title;
   final bool completed;
@@ -31,6 +33,21 @@ class TaskSerializer {
         'completed': entity.completed,
       };
 
+  /// Envelope form used by transports that persist field-local LWW metadata.
+  Map<String, dynamic> toSyncJson(
+          Task entity, Map<String, FieldLwwMetadata> fieldMetadata) =>
+      <String, dynamic>{
+        ...toJson(entity),
+        '_fieldMetadata':
+            fieldMetadata.map((key, value) => MapEntry(key, value.toJson())),
+      };
+
+  Map<String, FieldLwwMetadata> fieldMetadataFromJson(
+          Map<String, dynamic> json) =>
+      ((json['_fieldMetadata'] as Map<String, dynamic>?) ?? const {}).map(
+          (key, value) => MapEntry(
+              key, FieldLwwMetadata.fromJson(value as Map<String, dynamic>)));
+
   Task fromJson(Map<String, dynamic> json) => Task(
       id: (json['id'] as String?) ?? '',
       title: (json['title'] as String?) ?? '',
@@ -39,6 +56,9 @@ class TaskSerializer {
 
 class TaskSyncAdapter implements SyncAdapter<Task> {
   const TaskSyncAdapter();
+
+  @override
+  Type get modelType => Task;
 
   @override
   String get entityType => 'task';
@@ -54,46 +74,78 @@ class TaskSyncAdapter implements SyncAdapter<Task> {
   Task fromJson(Map<String, dynamic> json) =>
       const TaskSerializer().fromJson(json);
 
-  TaskSyncModel toModel(Task entity, VectorClock vectorClock, String nodeId) =>
+  @override
+  Map<String, FieldLwwMetadata> fieldMetadataForWrite(
+          Task entity,
+          Task? previous,
+          Map<String, FieldLwwMetadata> previousMetadata,
+          VectorClock clock,
+          String nodeId) =>
+      <String, FieldLwwMetadata>{
+        'id': previous == null || previous.id != entity.id
+            ? FieldLwwMetadata(timestamp: clock, nodeId: nodeId)
+            : previousMetadata['id']!,
+        'title': previous == null || previous.title != entity.title
+            ? FieldLwwMetadata(timestamp: clock, nodeId: nodeId)
+            : previousMetadata['title']!,
+        'completed': previous == null || previous.completed != entity.completed
+            ? FieldLwwMetadata(timestamp: clock, nodeId: nodeId)
+            : previousMetadata['completed']!
+      };
+
+  @override
+  SyncMergeResult<Task> merge(
+      Task local,
+      Task remote,
+      VectorClock localClock,
+      VectorClock remoteClock,
+      String localNodeId,
+      String remoteNodeId,
+      Map<String, FieldLwwMetadata> localFieldMetadata,
+      Map<String, FieldLwwMetadata> remoteFieldMetadata) {
+    final merged = mergeModels(
+      toModel(local, localClock, localNodeId, localFieldMetadata),
+      toModel(remote, remoteClock, remoteNodeId, remoteFieldMetadata),
+    );
+    return SyncMergeResult(
+        Task(id: merged.id, title: merged.title, completed: merged.completed),
+        merged.fieldMetadata);
+  }
+
+  TaskSyncModel toModel(Task entity, VectorClock vectorClock, String nodeId,
+          Map<String, FieldLwwMetadata> fieldMetadata) =>
       TaskSyncModel(
           vectorClock: vectorClock,
           nodeId: nodeId,
+          fieldMetadata: fieldMetadata,
           id: entity.id,
           title: entity.title,
           completed: entity.completed);
 
-  TaskSyncModel mergeModels(TaskSyncModel local, TaskSyncModel remote) =>
-      TaskSyncModel(
-        id: LWWRegister(
-                value: local.id,
-                timestamp: local.vectorClock,
-                nodeId: local.nodeId)
-            .merge(LWWRegister(
-                value: remote.id,
-                timestamp: remote.vectorClock,
-                nodeId: remote.nodeId))
-            .value,
-        title: LWWRegister(
-                value: local.title,
-                timestamp: local.vectorClock,
-                nodeId: local.nodeId)
-            .merge(LWWRegister(
-                value: remote.title,
-                timestamp: remote.vectorClock,
-                nodeId: remote.nodeId))
-            .value,
-        completed: LWWRegister(
-                value: local.completed,
-                timestamp: local.vectorClock,
-                nodeId: local.nodeId)
-            .merge(LWWRegister(
-                value: remote.completed,
-                timestamp: remote.vectorClock,
-                nodeId: remote.nodeId))
-            .value,
-        vectorClock: local.vectorClock.merge(remote.vectorClock),
-        nodeId: LWWRegister.winningNodeId(local.nodeId, remote.nodeId),
-      );
+  TaskSyncModel mergeModels(TaskSyncModel local, TaskSyncModel remote) {
+    final idWinner = FieldLwwMetadata.winner(
+        local.fieldMetadata['id']!, remote.fieldMetadata['id']!);
+    final titleWinner = FieldLwwMetadata.winner(
+        local.fieldMetadata['title']!, remote.fieldMetadata['title']!);
+    final completedWinner = FieldLwwMetadata.winner(
+        local.fieldMetadata['completed']!, remote.fieldMetadata['completed']!);
+    return TaskSyncModel(
+      id: idWinner == local.fieldMetadata['id'] ? local.id : remote.id,
+      title: titleWinner == local.fieldMetadata['title']
+          ? local.title
+          : remote.title,
+      completed: completedWinner == local.fieldMetadata['completed']
+          ? local.completed
+          : remote.completed,
+      vectorClock: local.vectorClock.merge(remote.vectorClock),
+      nodeId: LWWRegister.winningNodeId(local.nodeId, remote.nodeId),
+      fieldMetadata: <String, FieldLwwMetadata>{
+        'id': idWinner,
+        'title': titleWinner,
+        'completed': completedWinner
+      },
+    );
+  }
 }
 
 void registerTaskSyncAdapter(SyncEngine engine) {
@@ -105,6 +157,8 @@ class TaskSyncTable extends Table {
   TextColumn get id => text()();
   TextColumn get payload => text()();
   TextColumn get vectorClock => text().named('vector_clock')();
+  TextColumn get fieldMetadata => text().named('field_metadata')();
+  TextColumn get nodeId => text().named('node_id')();
   IntColumn get deleted => integer().withDefault(const Constant(0))();
   IntColumn get lastModified => integer()
       .named('last_modified')

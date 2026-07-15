@@ -1,13 +1,12 @@
-# Phase 2 design notes
+# Sync merge decisions
 
-## LWW frontier pruning
+## Concurrent update versus tombstone
 
-An LWW frontier entry is safe to prune once the vector clock acknowledged by
-every known replica in a successful synchronization round-trip has advanced
-past that entry's timestamp. At that point it cannot become concurrent with a
-future write.
+For the MVP, a tombstone wins when a delete and an update are causally
+concurrent. The entity remains deleted and the clocks are merged so later
+operations retain both causal histories.
 
-Pruning belongs after a successful `SyncEngine.sync()` pull/push round-trip,
-because that is where the engine has fresh replica acknowledgements. Phase 2
-provides only a maintenance hook: the persistent, per-replica acknowledgement
-data required to implement this correctly arrives with the Drift adapter.
+A causally later update may resurrect a tombstone, and a causally later delete
+removes an update. An alternative policy is concurrent-update resurrection,
+but delete-wins avoids surprising restoration of data a user explicitly
+deleted and gives the MVP a simpler mental model.

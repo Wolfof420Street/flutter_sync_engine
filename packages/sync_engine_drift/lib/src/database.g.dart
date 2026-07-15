@@ -32,6 +32,17 @@ class $SyncEntityTableTable extends SyncEntityTable
   late final GeneratedColumn<String> vectorClock = GeneratedColumn<String>(
       'vector_clock', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _fieldMetadataMeta =
+      const VerificationMeta('fieldMetadata');
+  @override
+  late final GeneratedColumn<String> fieldMetadata = GeneratedColumn<String>(
+      'field_metadata', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nodeIdMeta = const VerificationMeta('nodeId');
+  @override
+  late final GeneratedColumn<String> nodeId = GeneratedColumn<String>(
+      'node_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
   static const VerificationMeta _deletedMeta =
       const VerificationMeta('deleted');
   @override
@@ -49,8 +60,16 @@ class $SyncEntityTableTable extends SyncEntityTable
       requiredDuringInsert: false,
       defaultValue: const CustomExpression<int>("strftime('%s','now')"));
   @override
-  List<GeneratedColumn> get $columns =>
-      [entityType, id, payload, vectorClock, deleted, lastModified];
+  List<GeneratedColumn> get $columns => [
+        entityType,
+        id,
+        payload,
+        vectorClock,
+        fieldMetadata,
+        nodeId,
+        deleted,
+        lastModified
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -89,6 +108,20 @@ class $SyncEntityTableTable extends SyncEntityTable
     } else if (isInserting) {
       context.missing(_vectorClockMeta);
     }
+    if (data.containsKey('field_metadata')) {
+      context.handle(
+          _fieldMetadataMeta,
+          fieldMetadata.isAcceptableOrUnknown(
+              data['field_metadata']!, _fieldMetadataMeta));
+    } else if (isInserting) {
+      context.missing(_fieldMetadataMeta);
+    }
+    if (data.containsKey('node_id')) {
+      context.handle(_nodeIdMeta,
+          nodeId.isAcceptableOrUnknown(data['node_id']!, _nodeIdMeta));
+    } else if (isInserting) {
+      context.missing(_nodeIdMeta);
+    }
     if (data.containsKey('deleted')) {
       context.handle(_deletedMeta,
           deleted.isAcceptableOrUnknown(data['deleted']!, _deletedMeta));
@@ -116,6 +149,10 @@ class $SyncEntityTableTable extends SyncEntityTable
           .read(DriftSqlType.string, data['${effectivePrefix}payload'])!,
       vectorClock: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}vector_clock'])!,
+      fieldMetadata: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}field_metadata'])!,
+      nodeId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}node_id'])!,
       deleted: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}deleted'])!,
       lastModified: attachedDatabase.typeMapping
@@ -135,6 +172,10 @@ class SyncEntityTableData extends DataClass
   final String id;
   final String payload;
   final String vectorClock;
+  final String fieldMetadata;
+
+  /// Durable provenance required for deterministic LWW tie-breaking.
+  final String nodeId;
   final int deleted;
   final int lastModified;
   const SyncEntityTableData(
@@ -142,6 +183,8 @@ class SyncEntityTableData extends DataClass
       required this.id,
       required this.payload,
       required this.vectorClock,
+      required this.fieldMetadata,
+      required this.nodeId,
       required this.deleted,
       required this.lastModified});
   @override
@@ -151,6 +194,8 @@ class SyncEntityTableData extends DataClass
     map['id'] = Variable<String>(id);
     map['payload'] = Variable<String>(payload);
     map['vector_clock'] = Variable<String>(vectorClock);
+    map['field_metadata'] = Variable<String>(fieldMetadata);
+    map['node_id'] = Variable<String>(nodeId);
     map['deleted'] = Variable<int>(deleted);
     map['last_modified'] = Variable<int>(lastModified);
     return map;
@@ -162,6 +207,8 @@ class SyncEntityTableData extends DataClass
       id: Value(id),
       payload: Value(payload),
       vectorClock: Value(vectorClock),
+      fieldMetadata: Value(fieldMetadata),
+      nodeId: Value(nodeId),
       deleted: Value(deleted),
       lastModified: Value(lastModified),
     );
@@ -175,6 +222,8 @@ class SyncEntityTableData extends DataClass
       id: serializer.fromJson<String>(json['id']),
       payload: serializer.fromJson<String>(json['payload']),
       vectorClock: serializer.fromJson<String>(json['vectorClock']),
+      fieldMetadata: serializer.fromJson<String>(json['fieldMetadata']),
+      nodeId: serializer.fromJson<String>(json['nodeId']),
       deleted: serializer.fromJson<int>(json['deleted']),
       lastModified: serializer.fromJson<int>(json['lastModified']),
     );
@@ -187,6 +236,8 @@ class SyncEntityTableData extends DataClass
       'id': serializer.toJson<String>(id),
       'payload': serializer.toJson<String>(payload),
       'vectorClock': serializer.toJson<String>(vectorClock),
+      'fieldMetadata': serializer.toJson<String>(fieldMetadata),
+      'nodeId': serializer.toJson<String>(nodeId),
       'deleted': serializer.toJson<int>(deleted),
       'lastModified': serializer.toJson<int>(lastModified),
     };
@@ -197,6 +248,8 @@ class SyncEntityTableData extends DataClass
           String? id,
           String? payload,
           String? vectorClock,
+          String? fieldMetadata,
+          String? nodeId,
           int? deleted,
           int? lastModified}) =>
       SyncEntityTableData(
@@ -204,6 +257,8 @@ class SyncEntityTableData extends DataClass
         id: id ?? this.id,
         payload: payload ?? this.payload,
         vectorClock: vectorClock ?? this.vectorClock,
+        fieldMetadata: fieldMetadata ?? this.fieldMetadata,
+        nodeId: nodeId ?? this.nodeId,
         deleted: deleted ?? this.deleted,
         lastModified: lastModified ?? this.lastModified,
       );
@@ -215,6 +270,10 @@ class SyncEntityTableData extends DataClass
       payload: data.payload.present ? data.payload.value : this.payload,
       vectorClock:
           data.vectorClock.present ? data.vectorClock.value : this.vectorClock,
+      fieldMetadata: data.fieldMetadata.present
+          ? data.fieldMetadata.value
+          : this.fieldMetadata,
+      nodeId: data.nodeId.present ? data.nodeId.value : this.nodeId,
       deleted: data.deleted.present ? data.deleted.value : this.deleted,
       lastModified: data.lastModified.present
           ? data.lastModified.value
@@ -229,6 +288,8 @@ class SyncEntityTableData extends DataClass
           ..write('id: $id, ')
           ..write('payload: $payload, ')
           ..write('vectorClock: $vectorClock, ')
+          ..write('fieldMetadata: $fieldMetadata, ')
+          ..write('nodeId: $nodeId, ')
           ..write('deleted: $deleted, ')
           ..write('lastModified: $lastModified')
           ..write(')'))
@@ -236,8 +297,8 @@ class SyncEntityTableData extends DataClass
   }
 
   @override
-  int get hashCode =>
-      Object.hash(entityType, id, payload, vectorClock, deleted, lastModified);
+  int get hashCode => Object.hash(entityType, id, payload, vectorClock,
+      fieldMetadata, nodeId, deleted, lastModified);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -246,6 +307,8 @@ class SyncEntityTableData extends DataClass
           other.id == this.id &&
           other.payload == this.payload &&
           other.vectorClock == this.vectorClock &&
+          other.fieldMetadata == this.fieldMetadata &&
+          other.nodeId == this.nodeId &&
           other.deleted == this.deleted &&
           other.lastModified == this.lastModified);
 }
@@ -255,6 +318,8 @@ class SyncEntityTableCompanion extends UpdateCompanion<SyncEntityTableData> {
   final Value<String> id;
   final Value<String> payload;
   final Value<String> vectorClock;
+  final Value<String> fieldMetadata;
+  final Value<String> nodeId;
   final Value<int> deleted;
   final Value<int> lastModified;
   final Value<int> rowid;
@@ -263,6 +328,8 @@ class SyncEntityTableCompanion extends UpdateCompanion<SyncEntityTableData> {
     this.id = const Value.absent(),
     this.payload = const Value.absent(),
     this.vectorClock = const Value.absent(),
+    this.fieldMetadata = const Value.absent(),
+    this.nodeId = const Value.absent(),
     this.deleted = const Value.absent(),
     this.lastModified = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -272,18 +339,24 @@ class SyncEntityTableCompanion extends UpdateCompanion<SyncEntityTableData> {
     required String id,
     required String payload,
     required String vectorClock,
+    required String fieldMetadata,
+    required String nodeId,
     this.deleted = const Value.absent(),
     this.lastModified = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : entityType = Value(entityType),
         id = Value(id),
         payload = Value(payload),
-        vectorClock = Value(vectorClock);
+        vectorClock = Value(vectorClock),
+        fieldMetadata = Value(fieldMetadata),
+        nodeId = Value(nodeId);
   static Insertable<SyncEntityTableData> custom({
     Expression<String>? entityType,
     Expression<String>? id,
     Expression<String>? payload,
     Expression<String>? vectorClock,
+    Expression<String>? fieldMetadata,
+    Expression<String>? nodeId,
     Expression<int>? deleted,
     Expression<int>? lastModified,
     Expression<int>? rowid,
@@ -293,6 +366,8 @@ class SyncEntityTableCompanion extends UpdateCompanion<SyncEntityTableData> {
       if (id != null) 'id': id,
       if (payload != null) 'payload': payload,
       if (vectorClock != null) 'vector_clock': vectorClock,
+      if (fieldMetadata != null) 'field_metadata': fieldMetadata,
+      if (nodeId != null) 'node_id': nodeId,
       if (deleted != null) 'deleted': deleted,
       if (lastModified != null) 'last_modified': lastModified,
       if (rowid != null) 'rowid': rowid,
@@ -304,6 +379,8 @@ class SyncEntityTableCompanion extends UpdateCompanion<SyncEntityTableData> {
       Value<String>? id,
       Value<String>? payload,
       Value<String>? vectorClock,
+      Value<String>? fieldMetadata,
+      Value<String>? nodeId,
       Value<int>? deleted,
       Value<int>? lastModified,
       Value<int>? rowid}) {
@@ -312,6 +389,8 @@ class SyncEntityTableCompanion extends UpdateCompanion<SyncEntityTableData> {
       id: id ?? this.id,
       payload: payload ?? this.payload,
       vectorClock: vectorClock ?? this.vectorClock,
+      fieldMetadata: fieldMetadata ?? this.fieldMetadata,
+      nodeId: nodeId ?? this.nodeId,
       deleted: deleted ?? this.deleted,
       lastModified: lastModified ?? this.lastModified,
       rowid: rowid ?? this.rowid,
@@ -333,6 +412,12 @@ class SyncEntityTableCompanion extends UpdateCompanion<SyncEntityTableData> {
     if (vectorClock.present) {
       map['vector_clock'] = Variable<String>(vectorClock.value);
     }
+    if (fieldMetadata.present) {
+      map['field_metadata'] = Variable<String>(fieldMetadata.value);
+    }
+    if (nodeId.present) {
+      map['node_id'] = Variable<String>(nodeId.value);
+    }
     if (deleted.present) {
       map['deleted'] = Variable<int>(deleted.value);
     }
@@ -352,6 +437,8 @@ class SyncEntityTableCompanion extends UpdateCompanion<SyncEntityTableData> {
           ..write('id: $id, ')
           ..write('payload: $payload, ')
           ..write('vectorClock: $vectorClock, ')
+          ..write('fieldMetadata: $fieldMetadata, ')
+          ..write('nodeId: $nodeId, ')
           ..write('deleted: $deleted, ')
           ..write('lastModified: $lastModified, ')
           ..write('rowid: $rowid')
@@ -946,6 +1033,8 @@ typedef $$SyncEntityTableTableCreateCompanionBuilder = SyncEntityTableCompanion
   required String id,
   required String payload,
   required String vectorClock,
+  required String fieldMetadata,
+  required String nodeId,
   Value<int> deleted,
   Value<int> lastModified,
   Value<int> rowid,
@@ -956,6 +1045,8 @@ typedef $$SyncEntityTableTableUpdateCompanionBuilder = SyncEntityTableCompanion
   Value<String> id,
   Value<String> payload,
   Value<String> vectorClock,
+  Value<String> fieldMetadata,
+  Value<String> nodeId,
   Value<int> deleted,
   Value<int> lastModified,
   Value<int> rowid,
@@ -981,6 +1072,12 @@ class $$SyncEntityTableTableFilterComposer
 
   ColumnFilters<String> get vectorClock => $composableBuilder(
       column: $table.vectorClock, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get fieldMetadata => $composableBuilder(
+      column: $table.fieldMetadata, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get nodeId => $composableBuilder(
+      column: $table.nodeId, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get deleted => $composableBuilder(
       column: $table.deleted, builder: (column) => ColumnFilters(column));
@@ -1010,6 +1107,13 @@ class $$SyncEntityTableTableOrderingComposer
   ColumnOrderings<String> get vectorClock => $composableBuilder(
       column: $table.vectorClock, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get fieldMetadata => $composableBuilder(
+      column: $table.fieldMetadata,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get nodeId => $composableBuilder(
+      column: $table.nodeId, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get deleted => $composableBuilder(
       column: $table.deleted, builder: (column) => ColumnOrderings(column));
 
@@ -1038,6 +1142,12 @@ class $$SyncEntityTableTableAnnotationComposer
 
   GeneratedColumn<String> get vectorClock => $composableBuilder(
       column: $table.vectorClock, builder: (column) => column);
+
+  GeneratedColumn<String> get fieldMetadata => $composableBuilder(
+      column: $table.fieldMetadata, builder: (column) => column);
+
+  GeneratedColumn<String> get nodeId =>
+      $composableBuilder(column: $table.nodeId, builder: (column) => column);
 
   GeneratedColumn<int> get deleted =>
       $composableBuilder(column: $table.deleted, builder: (column) => column);
@@ -1078,6 +1188,8 @@ class $$SyncEntityTableTableTableManager extends RootTableManager<
             Value<String> id = const Value.absent(),
             Value<String> payload = const Value.absent(),
             Value<String> vectorClock = const Value.absent(),
+            Value<String> fieldMetadata = const Value.absent(),
+            Value<String> nodeId = const Value.absent(),
             Value<int> deleted = const Value.absent(),
             Value<int> lastModified = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -1087,6 +1199,8 @@ class $$SyncEntityTableTableTableManager extends RootTableManager<
             id: id,
             payload: payload,
             vectorClock: vectorClock,
+            fieldMetadata: fieldMetadata,
+            nodeId: nodeId,
             deleted: deleted,
             lastModified: lastModified,
             rowid: rowid,
@@ -1096,6 +1210,8 @@ class $$SyncEntityTableTableTableManager extends RootTableManager<
             required String id,
             required String payload,
             required String vectorClock,
+            required String fieldMetadata,
+            required String nodeId,
             Value<int> deleted = const Value.absent(),
             Value<int> lastModified = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -1105,6 +1221,8 @@ class $$SyncEntityTableTableTableManager extends RootTableManager<
             id: id,
             payload: payload,
             vectorClock: vectorClock,
+            fieldMetadata: fieldMetadata,
+            nodeId: nodeId,
             deleted: deleted,
             lastModified: lastModified,
             rowid: rowid,

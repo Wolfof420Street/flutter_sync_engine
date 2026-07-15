@@ -9,6 +9,10 @@ class SyncEntityTable extends Table {
   TextColumn get id => text()();
   TextColumn get payload => text()();
   TextColumn get vectorClock => text().named('vector_clock')();
+  TextColumn get fieldMetadata => text().named('field_metadata')();
+
+  /// Durable provenance required for deterministic LWW tie-breaking.
+  TextColumn get nodeId => text().named('node_id')();
   IntColumn get deleted => integer().withDefault(const Constant(0))();
   IntColumn get lastModified => integer()
       .named('last_modified')

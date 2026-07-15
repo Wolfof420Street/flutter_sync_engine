@@ -18,6 +18,8 @@ class _Item {
 
 class _ItemAdapter implements SyncAdapter<_Item> {
   @override
+  Type get modelType => _Item;
+  @override
   String get entityType => 'item';
   @override
   String idOf(_Item entity) => entity.id;
@@ -27,6 +29,37 @@ class _ItemAdapter implements SyncAdapter<_Item> {
   @override
   _Item fromJson(Map<String, dynamic> json) =>
       _Item(json['id'] as String, json['value'] as String);
+
+  @override
+  Map<String, FieldLwwMetadata> fieldMetadataForWrite(
+          _Item entity,
+          _Item? previous,
+          Map<String, FieldLwwMetadata> previousMetadata,
+          VectorClock clock,
+          String nodeId) =>
+      {
+        'value': previous == null || previous.value != entity.value
+            ? FieldLwwMetadata(timestamp: clock, nodeId: nodeId)
+            : previousMetadata['value']!,
+      };
+
+  @override
+  SyncMergeResult<_Item> merge(
+      _Item local,
+      _Item remote,
+      VectorClock localClock,
+      VectorClock remoteClock,
+      String localNodeId,
+      String remoteNodeId,
+      Map<String, FieldLwwMetadata> localFieldMetadata,
+      Map<String, FieldLwwMetadata> remoteFieldMetadata) {
+    final winner = FieldLwwMetadata.winner(
+        localFieldMetadata['value']!, remoteFieldMetadata['value']!);
+    return SyncMergeResult(
+      winner == localFieldMetadata['value']! ? local : remote,
+      {'value': winner},
+    );
+  }
 }
 
 void main() {
@@ -37,9 +70,10 @@ void main() {
     final database = SyncDriftDatabase(NativeDatabase.memory());
     final storage =
         DriftSyncStorage(database, adapters: {_Item: _ItemAdapter()});
-    await storage.save('one', const _Item('one', 'new'), VectorClock({'a': 2}));
     await storage.save(
-        'one', const _Item('one', 'stale'), VectorClock({'a': 1}));
+        'one', const _Item('one', 'new'), VectorClock({'a': 2}), 'a');
+    await storage.save(
+        'one', const _Item('one', 'stale'), VectorClock({'a': 1}), 'a');
     expect(await storage.load<_Item>('one'), const _Item('one', 'new'));
     expect(storage, isA<SyncAcknowledgementStorage>());
     await database.close();
@@ -126,12 +160,12 @@ void main() {
     final watched = <List<_Item>>[];
     final subscription = storage.watch<_Item>().listen(watched.add);
     await storage.save(
-        'one', const _Item('one', 'first'), VectorClock({'a': 1}));
+        'one', const _Item('one', 'first'), VectorClock({'a': 1}), 'a');
     await storage.save(
-        'one', const _Item('one', 'updated'), VectorClock({'a': 2}));
+        'one', const _Item('one', 'updated'), VectorClock({'a': 2}), 'a');
     expect(await storage.load<_Item>('one'), const _Item('one', 'updated'));
     expect(await storage.loadAll<_Item>(), [const _Item('one', 'updated')]);
-    await storage.delete<_Item>('one');
+    await storage.delete<_Item>('one', VectorClock({'a': 3}), 'a');
     expect(await storage.load<_Item>('one'), isNull);
     expect(await storage.loadAll<_Item>(), isEmpty);
     await Future<void>.delayed(Duration.zero);

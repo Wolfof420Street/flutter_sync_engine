@@ -24,24 +24,23 @@ class DriftSyncStorage implements SyncStorage, SyncAcknowledgementStorage {
   Future<void> initialize() async {}
 
   @override
-  Future<void> save<T>(String id, T entity, VectorClock clock) async {
+  Future<void> save<T>(
+      String id, T entity, VectorClock clock, String nodeId) async {
     final adapter = _adapter<T>();
-    final existing = await _row(adapter.entityType, id);
-    if (existing != null &&
-        VectorClock.fromJson(jsonDecode(existing.read<String>('vector_clock'))
-                as Map<String, dynamic>)
-            .happenedAfter(clock)) {
-      return;
-    }
-    await _database.customStatement(
-      'INSERT INTO sync_entity_table (entity_type,id,payload,vector_clock,deleted,last_modified) VALUES (?,?,?,?,0,strftime(\'%s\',\'now\')) '
-      'ON CONFLICT(entity_type,id) DO UPDATE SET payload=excluded.payload,vector_clock=excluded.vector_clock,deleted=0,last_modified=excluded.last_modified',
-      [
-        adapter.entityType,
-        id,
-        jsonEncode(adapter.toJson(entity)),
-        jsonEncode(clock.toJson())
-      ],
+    final existing = await loadStored(adapter.modelType, id);
+    await _saveByAdapter(
+      adapter,
+      id,
+      entity as Object,
+      clock,
+      nodeId,
+      adapter.fieldMetadataForWrite(
+        entity,
+        existing?.value as T?,
+        existing?.fieldMetadata ?? const {},
+        clock,
+        nodeId,
+      ),
     );
   }
 
@@ -68,11 +67,47 @@ class DriftSyncStorage implements SyncStorage, SyncAcknowledgementStorage {
   }
 
   @override
-  Future<void> delete<T>(String id) async {
+  Future<void> delete<T>(String id, VectorClock clock, String nodeId) async {
     final adapter = _adapter<T>();
-    await _database.customStatement(
-        'UPDATE sync_entity_table SET deleted=1 WHERE entity_type=? AND id=?',
-        [adapter.entityType, id]);
+    await _deleteByType(adapter.entityType, id, clock, nodeId);
+  }
+
+  @override
+  Future<SyncStoredEntity<Object?>?> loadStored(Type type, String id) async {
+    final adapter = _adapterByType(type);
+    final row = await _row(adapter.entityType, id);
+    if (row == null) return null;
+    final deleted = row.read<int>('deleted') == 1;
+    return SyncStoredEntity(
+      value: deleted
+          ? null
+          : adapter.fromJson(
+              jsonDecode(row.read<String>('payload')) as Map<String, dynamic>),
+      clock: VectorClock.fromJson(
+          jsonDecode(row.read<String>('vector_clock')) as Map<String, dynamic>),
+      nodeId: row.read<String>('node_id'),
+      deleted: deleted,
+      fieldMetadata: _decodeMetadata(row.read<String>('field_metadata')),
+    );
+  }
+
+  @override
+  Future<void> saveStored(
+      Type type,
+      String id,
+      Object entity,
+      VectorClock clock,
+      String nodeId,
+      Map<String, FieldLwwMetadata> fieldMetadata) async {
+    final adapter = _adapterByType(type);
+    await _saveByAdapter(adapter, id, entity, clock, nodeId, fieldMetadata);
+  }
+
+  @override
+  Future<void> deleteStored(
+      Type type, String id, VectorClock clock, String nodeId,
+      [Map<String, FieldLwwMetadata> fieldMetadata = const {}]) async {
+    await _deleteByType(_adapterByType(type).entityType, id, clock, nodeId);
   }
 
   @override
@@ -190,4 +225,55 @@ class DriftSyncStorage implements SyncStorage, SyncAcknowledgementStorage {
     if (adapter == null) throw UnregisteredSyncTypeError(T);
     return adapter as SyncAdapter<T>;
   }
+
+  SyncAdapter<dynamic> _adapterByType(Type type) {
+    final adapter = _adapters[type];
+    if (adapter == null) throw UnregisteredSyncTypeError(type);
+    return adapter;
+  }
+
+  Future<void> _saveByAdapter(
+      SyncAdapter<dynamic> adapter,
+      String id,
+      Object entity,
+      VectorClock clock,
+      String nodeId,
+      Map<String, FieldLwwMetadata> fieldMetadata) async {
+    final existing = await _row(adapter.entityType, id);
+    if (existing != null &&
+        VectorClock.fromJson(jsonDecode(existing.read<String>('vector_clock'))
+                as Map<String, dynamic>)
+            .happenedAfter(clock)) {
+      return;
+    }
+    await _database.customStatement(
+      'INSERT INTO sync_entity_table (entity_type,id,payload,vector_clock,field_metadata,node_id,deleted,last_modified) VALUES (?,?,?,?,?,?,0,strftime(\'%s\',\'now\')) '
+      'ON CONFLICT(entity_type,id) DO UPDATE SET payload=excluded.payload,vector_clock=excluded.vector_clock,field_metadata=excluded.field_metadata,node_id=excluded.node_id,deleted=0,last_modified=excluded.last_modified',
+      [
+        adapter.entityType,
+        id,
+        jsonEncode(adapter.toJson(entity)),
+        jsonEncode(clock.toJson()),
+        _encodeMetadata(fieldMetadata),
+        nodeId
+      ],
+    );
+  }
+
+  Future<void> _deleteByType(
+          String entityType, String id, VectorClock clock, String nodeId) =>
+      _database.customStatement(
+        'INSERT INTO sync_entity_table (entity_type,id,payload,vector_clock,field_metadata,node_id,deleted,last_modified) VALUES (?,?,\'{}\',?,?,?,1,strftime(\'%s\',\'now\')) '
+        'ON CONFLICT(entity_type,id) DO UPDATE SET vector_clock=excluded.vector_clock,field_metadata=excluded.field_metadata,node_id=excluded.node_id,deleted=1,last_modified=excluded.last_modified',
+        [entityType, id, jsonEncode(clock.toJson()), '{}', nodeId],
+      );
+
+  Map<String, FieldLwwMetadata> _decodeMetadata(String json) {
+    final values = jsonDecode(json) as Map<String, dynamic>;
+    return values.map((key, value) => MapEntry(
+        key, FieldLwwMetadata.fromJson(value as Map<String, dynamic>)));
+  }
+
+  String _encodeMetadata(Map<String, FieldLwwMetadata> metadata) =>
+      jsonEncode(metadata.map((key, value) => MapEntry(key, value.toJson())));
 }

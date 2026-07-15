@@ -68,14 +68,29 @@ class SyncableGenerator extends GeneratorForAnnotation<Syncable> {
     final fromJson =
         fields.map((field) => '${field.name}: ${_fromJson(field)}').join(', ');
     final mergedFields = fields.map(_mergedField).join(',\n      ');
+    final lwwFields = fields
+        .where((field) => _strategy(field) == ConflictType.lastWriteWins)
+        .toList();
+    final localMetadata = lwwFields
+        .map((field) =>
+            "'${field.name}': previous == null || previous.${field.name} != entity.${field.name} ? FieldLwwMetadata(timestamp: clock, nodeId: nodeId) : previousMetadata['${field.name}']!")
+        .join(', ');
+    final winnerDeclarations = lwwFields
+        .map((field) =>
+            "final ${field.name}Winner = FieldLwwMetadata.winner(local.fieldMetadata['${field.name}']!, remote.fieldMetadata['${field.name}']!);")
+        .join('\n    ');
+    final mergedMetadata = lwwFields
+        .map((field) => "'${field.name}': ${field.name}Winner")
+        .join(', ');
     final driftTable = generateDriftTable ? _driftTable(type) : '';
 
     return '''
 class $model {
-  const $model({required this.vectorClock, required this.nodeId, $constructorParameters});
+  const $model({required this.vectorClock, required this.nodeId, required this.fieldMetadata, $constructorParameters});
 
   final VectorClock vectorClock;
   final String nodeId;
+  final Map<String, FieldLwwMetadata> fieldMetadata;
 $fieldDeclarations
 }
 
@@ -84,11 +99,29 @@ class $serializer {
 
   Map<String, dynamic> toJson($type entity) => <String, dynamic>{${modelJson.isEmpty ? '' : '\n    $modelJson,\n  '}};
 
+  /// Envelope form used by transports that persist field-local LWW metadata.
+  Map<String, dynamic> toSyncJson($type entity,
+          Map<String, FieldLwwMetadata> fieldMetadata) =>
+      <String, dynamic>{
+        ...toJson(entity),
+        '_fieldMetadata': fieldMetadata.map(
+            (key, value) => MapEntry(key, value.toJson())),
+      };
+
+  Map<String, FieldLwwMetadata> fieldMetadataFromJson(
+          Map<String, dynamic> json) =>
+      ((json['_fieldMetadata'] as Map<String, dynamic>?) ?? const {})
+          .map((key, value) => MapEntry(
+              key, FieldLwwMetadata.fromJson(value as Map<String, dynamic>)));
+
   $type fromJson(Map<String, dynamic> json) => $type($fromJson);
 }
 
 class $adapter implements SyncAdapter<$type> {
   const $adapter();
+
+  @override
+  Type get modelType => $type;
 
   @override
   String get entityType => '${_snakeCase(type)}';
@@ -102,14 +135,36 @@ class $adapter implements SyncAdapter<$type> {
   @override
   $type fromJson(Map<String, dynamic> json) => const $serializer().fromJson(json);
 
-  $model toModel($type entity, VectorClock vectorClock, String nodeId) =>
-      $model(vectorClock: vectorClock, nodeId: nodeId, $fromEntity);
+  @override
+  Map<String, FieldLwwMetadata> fieldMetadataForWrite($type entity, $type? previous,
+      Map<String, FieldLwwMetadata> previousMetadata, VectorClock clock, String nodeId) =>
+      <String, FieldLwwMetadata>{$localMetadata};
 
-  $model mergeModels($model local, $model remote) => $model(
+  @override
+  SyncMergeResult<$type> merge($type local, $type remote, VectorClock localClock,
+      VectorClock remoteClock, String localNodeId, String remoteNodeId,
+      Map<String, FieldLwwMetadata> localFieldMetadata,
+      Map<String, FieldLwwMetadata> remoteFieldMetadata) {
+    final merged = mergeModels(
+      toModel(local, localClock, localNodeId, localFieldMetadata),
+      toModel(remote, remoteClock, remoteNodeId, remoteFieldMetadata),
+    );
+    return SyncMergeResult($type(${fields.map((field) => '${field.name}: merged.${field.name}').join(', ')}), merged.fieldMetadata);
+  }
+
+  $model toModel($type entity, VectorClock vectorClock, String nodeId,
+      Map<String, FieldLwwMetadata> fieldMetadata) =>
+      $model(vectorClock: vectorClock, nodeId: nodeId, fieldMetadata: fieldMetadata, $fromEntity);
+
+  $model mergeModels($model local, $model remote) {
+    $winnerDeclarations
+    return $model(
       $mergedFields,
       vectorClock: local.vectorClock.merge(remote.vectorClock),
       nodeId: LWWRegister.winningNodeId(local.nodeId, remote.nodeId),
+      fieldMetadata: <String, FieldLwwMetadata>{$mergedMetadata},
     );
+  }
 }
 
 void register${type}SyncAdapter(SyncEngine engine) {
@@ -150,6 +205,8 @@ class $table extends Table {
   TextColumn get id => text()();
   TextColumn get payload => text()();
   TextColumn get vectorClock => text().named('vector_clock')();
+  TextColumn get fieldMetadata => text().named('field_metadata')();
+  TextColumn get nodeId => text().named('node_id')();
   IntColumn get deleted => integer().withDefault(const Constant(0))();
   IntColumn get lastModified => integer().named('last_modified').withDefault(const CustomExpression<int>("strftime('%s','now')"))();
 
@@ -169,7 +226,7 @@ class $table extends Table {
       ConflictType.custom =>
         '$name: throw UnsupportedError(\'TODO: implement custom merge for $name\')',
       ConflictType.lastWriteWins =>
-        '$name: LWWRegister(value: local.$name, timestamp: local.vectorClock, nodeId: local.nodeId).merge(LWWRegister(value: remote.$name, timestamp: remote.vectorClock, nodeId: remote.nodeId)).value',
+        '$name: ${name}Winner == local.fieldMetadata[\'$name\'] ? local.$name : remote.$name',
     };
   }
 

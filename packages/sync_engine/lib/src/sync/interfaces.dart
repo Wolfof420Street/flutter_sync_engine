@@ -3,6 +3,10 @@ import 'adapter.dart';
 import 'operation.dart';
 
 /// Persistence contract implemented by pluggable storage adapters.
+///
+/// Implementations must durably preserve vector clocks, writer identity, and
+/// generated field metadata. The engine owns merge decisions; storage must not
+/// silently discard causally relevant metadata.
 abstract class SyncStorage {
   Future<void> initialize();
 
@@ -34,6 +38,9 @@ abstract class SyncStorage {
 }
 
 /// A durable entity state, including tombstones that have no domain value.
+///
+/// This is an advanced adapter-facing type. App code should use [SyncEngine]
+/// reads and watches rather than depending on its persistence representation.
 class SyncStoredEntity<T> {
   const SyncStoredEntity({
     required this.value,
@@ -58,12 +65,16 @@ abstract class SyncAcknowledgementStorage {
 }
 
 /// Server-facing contract implemented by pluggable transport adapters.
+///
+/// A transport serializes operations, returns remote operations since a sync
+/// token, and may expose server-originated notifications to trigger a pull.
 abstract class SyncTransport {
   Future<SyncBatch> pull({required String lastSyncToken});
   Future<SyncResult> push(List<SyncOperation> operations);
   Stream<SyncNotification> get notifications;
 }
 
+/// Operations and acknowledgement state returned by one pull request.
 class SyncBatch {
   const SyncBatch({
     this.operations = const [],
@@ -91,6 +102,7 @@ class ReplicaAcknowledgement {
   final VectorClock acknowledgedClock;
 }
 
+/// Signals that a transport has remote work available for [SyncEngine.sync].
 class SyncNotification {
   const SyncNotification({this.syncToken});
 

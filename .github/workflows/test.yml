@@ -25,16 +25,24 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-0
 
       - name: Install Melos
-        run: dart pub global activate melos
+        run: dart pub global activate melos 2.9.0
 
       - name: Bootstrap workspace
         run: dart pub global run melos bootstrap
 
+      - name: Verify formatting
+        run: dart format --set-exit-if-changed packages example
+
+      - name: Verify generated sources
+        run: dart pub global run melos run generate
+
       - name: Analyze packages
-        run: dart pub global run melos exec --fail-fast -- dart analyze
+        # These are deliberately invalid negative fixtures. Their dedicated
+        # generator tests assert the expected build failures.
+        run: dart pub global run melos exec --fail-fast --ignore=sync_engine_generator_invalid_id_fixture --ignore=drift_remove_fixture -- dart analyze
 
       - name: Test packages
-        run: dart pub global run melos exec --fail-fast --ignore=sync_engine_generator -- dart test
+        run: dart pub global run melos exec --fail-fast --ignore=sync_engine_generator --ignore=sync_engine_generator_good_fixture --ignore=sync_engine_generator_invalid_id_fixture --ignore=drift_bootstrap_fixture --ignore=drift_additive_fixture --ignore=drift_remove_fixture -- dart test
 
       # Fixtures are standalone packages, so Melos does not bootstrap their
       # package configs on a fresh checkout.
@@ -47,7 +55,12 @@ jobs:
 
       - name: Test generator migration fixtures
         working-directory: packages/sync_engine_generator
-        run: dart test -r expanded
+        run: |
+          dart test test/bootstrap_schema_test.dart test/drift_migration_fixture_test.dart -r expanded
+          (cd test/fixtures/good && dart test -r expanded)
+          (cd test/fixtures/drift_bootstrap && dart test -r expanded)
+          (cd test/fixtures/drift_additive && dart test -r expanded)
+          (cd test/fixtures/drift_remove && dart test -r expanded)
 
       # The test owns the Shelf process lifecycle. Setting this opt-in flag
       # makes the real localhost TaskTransport/Shelf contract run on CI.
@@ -55,4 +68,8 @@ jobs:
         working-directory: example/task_manager
         env:
           RUN_HTTP_INTEGRATION: 'true'
+        run: flutter test -r expanded
+
+      - name: Test external notes consumer
+        working-directory: example/notes_app
         run: flutter test -r expanded

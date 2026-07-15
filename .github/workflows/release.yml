@@ -1,0 +1,44 @@
+name: release-check
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  verify-release-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install SQLite runtime
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-0
+
+      - name: Install Melos
+        run: dart pub global activate melos 2.9.0
+
+      - name: Bootstrap workspace
+        run: dart pub global run melos bootstrap
+
+      - name: Verify generated sources, analysis, and tests
+        run: |
+          dart pub global run melos run generate
+          dart pub global run melos run analyze
+          dart pub global run melos run test
+
+      - name: Verify live HTTP task-manager contract
+        working-directory: example/task_manager
+        env:
+          RUN_HTTP_INTEGRATION: 'true'
+        run: flutter test -r expanded
+
+      # Deliberately a dry run: tag creation must never publish a package.
+      - name: Validate publish archives
+        run: |
+          (cd packages/sync_engine && dart pub publish --dry-run)
+          (cd packages/sync_engine_generator && dart pub publish --dry-run)
+          (cd packages/sync_engine_drift && dart pub publish --dry-run)

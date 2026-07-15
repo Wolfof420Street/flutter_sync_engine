@@ -9,13 +9,19 @@ void main() {
       const Task(id: 'task', title: 'from a', tags: {'one'}),
       VectorClock({'a': 1}),
       'a',
-      {'id': FieldLwwMetadata(timestamp: VectorClock({'a': 1}), nodeId: 'a'), 'title': FieldLwwMetadata(timestamp: VectorClock({'a': 1}), nodeId: 'a')},
+      {
+        'id': FieldLwwMetadata(timestamp: VectorClock({'a': 1}), nodeId: 'a'),
+        'title': FieldLwwMetadata(timestamp: VectorClock({'a': 1}), nodeId: 'a')
+      },
     );
     final right = adapter.toModel(
       const Task(id: 'task', title: 'from b', tags: {'two'}),
       VectorClock({'b': 1}),
       'b',
-      {'id': FieldLwwMetadata(timestamp: VectorClock({'b': 1}), nodeId: 'b'), 'title': FieldLwwMetadata(timestamp: VectorClock({'b': 1}), nodeId: 'b')},
+      {
+        'id': FieldLwwMetadata(timestamp: VectorClock({'b': 1}), nodeId: 'b'),
+        'title': FieldLwwMetadata(timestamp: VectorClock({'b': 1}), nodeId: 'b')
+      },
     );
 
     final merged = adapter.mergeModels(left, right);
@@ -23,8 +29,10 @@ void main() {
     expect(merged.title, 'from b');
     expect(merged.tags, GSet({'one'}).merge(GSet({'two'})).value);
     expect(
-      TaskSerializer().fromJson(TaskSerializer().toJson(
-          const Task(id: 'task', title: 'title', tags: {'tag'}))).tags,
+      TaskSerializer()
+          .fromJson(TaskSerializer()
+              .toJson(const Task(id: 'task', title: 'title', tags: {'tag'})))
+          .tags,
       {'tag'},
     );
   });

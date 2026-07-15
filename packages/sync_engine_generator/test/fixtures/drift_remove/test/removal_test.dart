@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 void main() {
-  test('build rejects the rename-shaped schema change with the documented error',
+  test(
+      'build rejects the rename-shaped schema change with the documented error',
       () async {
     final result = await Process.run(
       Platform.resolvedExecutable,

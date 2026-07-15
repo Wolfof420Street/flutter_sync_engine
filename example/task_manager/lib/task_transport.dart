@@ -72,11 +72,14 @@ class TaskTransport implements SyncTransport {
       'entityId': operation.entityId,
       'clock': operation.vectorClock.toJson(),
       'nodeId': operation.nodeId,
-      'fieldMetadata': operation.fieldMetadata
-          .map((key, value) => MapEntry(key, value.toJson())),
+      'fieldMetadata': operation.fieldMetadata.map(
+        (key, value) => MapEntry(key, value.toJson()),
+      ),
       if (entity is Task)
-        'entity': const TaskSerializer()
-            .toSyncJson(entity, operation.fieldMetadata),
+        'entity': const TaskSerializer().toSyncJson(
+          entity,
+          operation.fieldMetadata,
+        ),
     };
   }
 

@@ -1,0 +1,3 @@
+# Standalone packages used only to exercise build_runner migration paths.
+# They are not part of the generator's distributable test suite.
+test/fixtures/

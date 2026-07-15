@@ -17,12 +17,12 @@ before_install:
   - export PATH="$HOME/flutter/bin:$PATH"; flutter --version
 
 install:
-  - export PATH="$HOME/flutter/bin:$PATH"; dart pub global activate melos
+  - export PATH="$HOME/flutter/bin:$PATH"; dart pub global activate melos 2.9.0
   - export PATH="$HOME/flutter/bin:$PATH"; dart pub global run melos bootstrap
 
 script:
-  - export PATH="$HOME/flutter/bin:$PATH"; dart pub global run melos exec --fail-fast -- dart analyze
-  - export PATH="$HOME/flutter/bin:$PATH"; dart pub global run melos exec --fail-fast --ignore=sync_engine_generator -- dart test
+  - export PATH="$HOME/flutter/bin:$PATH"; dart pub global run melos exec --fail-fast --ignore=sync_engine_generator_invalid_id_fixture --ignore=drift_remove_fixture -- dart analyze
+  - export PATH="$HOME/flutter/bin:$PATH"; dart pub global run melos exec --fail-fast --ignore=sync_engine_generator --ignore=sync_engine_generator_good_fixture --ignore=sync_engine_generator_invalid_id_fixture --ignore=drift_bootstrap_fixture --ignore=drift_additive_fixture --ignore=drift_remove_fixture -- dart test
   - |
       export PATH="$HOME/flutter/bin:$PATH"
       cd packages/sync_engine_generator

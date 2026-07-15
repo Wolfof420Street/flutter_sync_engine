@@ -1,7 +1,7 @@
 name: sync_engine
 description: Pure-Dart CRDT primitives and synchronization protocol foundations.
 version: 0.1.0
-repository: https://github.com/example/flutter_sync_engine
+repository: https://github.com/Wolfof420Street/flutter_sync_engine.git
 resolution: workspace
 topics:
   - crdt

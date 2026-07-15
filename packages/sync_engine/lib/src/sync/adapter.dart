@@ -51,6 +51,11 @@ class SyncMergeResult<T> {
 }
 
 /// Supplies the entity-specific details required by the generic sync engine.
+/// Advanced entity-specific bridge used by [SyncEngine].
+///
+/// Applications normally use generated implementations. Hand-written adapters
+/// are supported for advanced integrations, but this contract may evolve while
+/// per-field synchronization metadata is still pre-1.0.
 abstract class SyncAdapter<T> {
   /// Runtime model type used for engine-to-storage dispatch.
   Type get modelType;

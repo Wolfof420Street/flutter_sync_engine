@@ -1,4 +1,12 @@
-/// Pure-Dart CRDT primitives for offline-first synchronization.
+/// Pure-Dart CRDT primitives and offline-first synchronization contracts.
+///
+/// Applications use [SyncEngine] with a [SyncStorage] and [SyncTransport]
+/// supplied by their chosen persistence and backend adapters. Annotated domain
+/// models receive generated [SyncAdapter] implementations from
+/// `sync_engine_generator`.
+///
+/// This package does not provide networking, database storage, encryption, or
+/// authentication. Those responsibilities belong to adapter packages.
 library;
 
 export 'src/annotations.dart';

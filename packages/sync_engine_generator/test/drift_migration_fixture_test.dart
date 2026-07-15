@@ -44,10 +44,17 @@ void main() {
       () async {
     final manifest = File('${bootstrap.path}/lib/sync_engine_schema.json');
     final generated = File('${bootstrap.path}/lib/task.sync.dart');
+    final originalGenerated =
+        generated.existsSync() ? await generated.readAsString() : null;
     if (manifest.existsSync()) await manifest.delete();
     if (generated.existsSync()) await generated.delete();
     addTearDown(() async {
       if (manifest.existsSync()) await manifest.delete();
+      if (originalGenerated == null) {
+        if (generated.existsSync()) await generated.delete();
+      } else {
+        await generated.writeAsString(originalGenerated);
+      }
     });
 
     final buildResult = await build(bootstrap);

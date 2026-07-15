@@ -24,7 +24,8 @@ void main() {
     final write = await Process.run(
       dart,
       const <String>[
-        '--packages=.dart_tool/package_config.json', 'bin/write_legacy_payload.dart',
+        '--packages=.dart_tool/package_config.json',
+        'bin/write_legacy_payload.dart',
       ],
       workingDirectory: legacy.path,
     );

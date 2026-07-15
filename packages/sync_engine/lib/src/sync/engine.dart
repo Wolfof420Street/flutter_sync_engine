@@ -20,7 +20,11 @@ class ConflictResolution {
   final bool rolledBack;
 }
 
-/// Coordinates optimistic local changes with a pluggable transport and storage.
+/// Synchronizes annotated models with a remote backend.
+///
+/// Supports optimistic local writes, CRDT conflict resolution, offline queues,
+/// retries, and compensating rollbacks. Persistence and networking are supplied
+/// through [SyncStorage] and [SyncTransport].
 class SyncEngine {
   SyncEngine({
     required SyncStorage storage,
@@ -48,6 +52,7 @@ class SyncEngine {
   String _lastSyncToken = '';
   int _handledFailures = 0;
 
+  /// Emits outbound rejections and concurrent inbound merge resolutions.
   Stream<ConflictResolution> get conflicts => _conflictController.stream;
   SyncOutbox get outbox => _outbox;
 

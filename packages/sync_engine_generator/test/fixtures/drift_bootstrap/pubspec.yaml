@@ -1,0 +1,21 @@
+name: drift_bootstrap_fixture
+publish_to: none
+environment:
+  sdk: ^3.5.0
+dependencies:
+  drift: ^2.22.1
+  sync_engine: ^0.1.0
+  sync_engine_generator:
+    path: ../../..
+dev_dependencies:
+  build_runner: ^2.4.0
+  test: ^1.25.0
+dependency_overrides:
+  sync_engine:
+    path: ../../../../sync_engine
+
+# The fixture serializes a legacy payload but does not open SQLite.
+hooks:
+  user_defines:
+    sqlite3:
+      source: process

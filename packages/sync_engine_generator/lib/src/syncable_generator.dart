@@ -2,25 +2,39 @@
 
 import 'package:analyzer/dart/element/element.dart';
 import 'package:build/build.dart';
+import 'dart:convert';
 import 'package:source_gen/source_gen.dart';
 import 'package:sync_engine/sync_engine.dart';
 
 /// Emits model, adapter, serializer, and registry wiring for `@Syncable`.
 class SyncableGenerator extends GeneratorForAnnotation<Syncable> {
+  SyncableGenerator({
+    this.generateDriftTable = false,
+    required this.schemaManifest,
+    this.bootstrapSchema = false,
+  });
+
+  final bool generateDriftTable;
+  final String schemaManifest;
+  final bool bootstrapSchema;
   static final _idChecker = TypeChecker.fromRuntime(Id);
   static final _strategyChecker = TypeChecker.fromRuntime(ConflictStrategy);
 
   @override
-  String generateForAnnotatedElement(
+  Future<String> generateForAnnotatedElement(
     Element element,
     ConstantReader annotation,
     BuildStep buildStep,
-  ) {
+  ) async {
     if (element is! ClassElement) {
       throw InvalidGenerationSourceError('@Syncable can only annotate a class.',
           element: element);
     }
     final fields = element.fields.where((field) => !field.isStatic).toList();
+    if (generateDriftTable) {
+      await _validateSchemaManifest(
+          buildStep, element.name, fields.map((field) => field.name).toSet());
+    }
     final idFields =
         fields.where((field) => _idChecker.hasAnnotationOf(field)).toList();
     if (idFields.length != 1) {
@@ -54,6 +68,7 @@ class SyncableGenerator extends GeneratorForAnnotation<Syncable> {
     final fromJson =
         fields.map((field) => '${field.name}: ${_fromJson(field)}').join(', ');
     final mergedFields = fields.map(_mergedField).join(',\n      ');
+    final driftTable = generateDriftTable ? _driftTable(type) : '';
 
     return '''
 class $model {
@@ -81,18 +96,65 @@ class $adapter implements SyncAdapter<$type> {
   @override
   String idOf($type entity) => entity.${idField.name};
 
+  @override
+  Map<String, dynamic> toJson($type entity) => const $serializer().toJson(entity);
+
+  @override
+  $type fromJson(Map<String, dynamic> json) => const $serializer().fromJson(json);
+
   $model toModel($type entity, VectorClock vectorClock, String nodeId) =>
       $model(vectorClock: vectorClock, nodeId: nodeId, $fromEntity);
 
   $model mergeModels($model local, $model remote) => $model(
       $mergedFields,
       vectorClock: local.vectorClock.merge(remote.vectorClock),
-      nodeId: local.nodeId.compareTo(remote.nodeId) < 0 ? remote.nodeId : local.nodeId,
+      nodeId: LWWRegister.winningNodeId(local.nodeId, remote.nodeId),
     );
 }
 
 void register${type}SyncAdapter(SyncEngine engine) {
   engine.register<$type>(const $adapter());
+}
+$driftTable
+''';
+  }
+
+  Future<void> _validateSchemaManifest(
+      BuildStep step, String type, Set<String> currentFields) async {
+    final manifestId = AssetId(step.inputId.package, schemaManifest);
+    if (!await step.canRead(manifestId)) {
+      if (bootstrapSchema) return;
+      throw InvalidGenerationSourceError(
+        'Drift generation for $type requires the checked-in schema manifest $schemaManifest. '
+        'For a first build, set bootstrap_schema: true and run '
+        '`dart run sync_engine_generator:bootstrap_schema $schemaManifest $type <comma-separated-fields>`, then commit it.',
+      );
+    }
+    final decoded =
+        jsonDecode(await step.readAsString(manifestId)) as Map<String, dynamic>;
+    final previous =
+        (decoded[type] as List<dynamic>? ?? const []).cast<String>().toSet();
+    final removed = previous.difference(currentFields);
+    if (removed.isNotEmpty) {
+      throw InvalidGenerationSourceError(
+        'Additive-only Drift migration rejected for $type: removed or renamed field(s) ${removed.join(', ')}.',
+      );
+    }
+  }
+
+  String _driftTable(String type) {
+    final table = '${type}SyncTable';
+    return '''
+@DataClassName('${type}SyncRow')
+class $table extends Table {
+  TextColumn get id => text()();
+  TextColumn get payload => text()();
+  TextColumn get vectorClock => text().named('vector_clock')();
+  IntColumn get deleted => integer().withDefault(const Constant(0))();
+  IntColumn get lastModified => integer().named('last_modified').withDefault(const CustomExpression<int>("strftime('%s','now')"))();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
 }
 ''';
   }
@@ -131,8 +193,12 @@ void register${type}SyncAdapter(SyncEngine engine) {
     final name = field.name;
     if (type.startsWith('Set<') && type.endsWith('>')) {
       final elementType = type.substring(4, type.length - 1);
-      return '(json[\'$name\'] as List).cast<$elementType>().toSet()';
+      return '((json[\'$name\'] as List?) ?? const <dynamic>[]).cast<$elementType>().toSet()';
     }
+    if (type == 'bool') return '(json[\'$name\'] as bool?) ?? false';
+    if (type == 'int') return '(json[\'$name\'] as int?) ?? 0';
+    if (type == 'double') return '(json[\'$name\'] as num?)?.toDouble() ?? 0.0';
+    if (type == 'String') return '(json[\'$name\'] as String?) ?? \'\'';
     return 'json[\'$name\'] as $type';
   }
 

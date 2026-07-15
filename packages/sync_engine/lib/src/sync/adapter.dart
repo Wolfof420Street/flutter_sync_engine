@@ -5,6 +5,12 @@ abstract class SyncAdapter<T> {
 
   /// Extracts the stable identifier from [entity].
   String idOf(T entity);
+
+  /// Converts an entity to a transport and persistence-safe JSON map.
+  Map<String, dynamic> toJson(T entity);
+
+  /// Restores an entity from a transport and persistence-safe JSON map.
+  T fromJson(Map<String, dynamic> json);
 }
 
 /// Thrown when an operation is attempted for a type without an adapter.

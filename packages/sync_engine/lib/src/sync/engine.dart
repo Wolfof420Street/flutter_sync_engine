@@ -113,7 +113,10 @@ class SyncEngine {
     _lastSyncToken = batch.nextSyncToken;
     await _outbox.flush(_transport);
     await _processFailures();
-    await _pruneAcknowledgedFrontiers();
+    if (_storage case final SyncAcknowledgementStorage acknowledgementStorage) {
+      await acknowledgementStorage.recordAcknowledgements(batch.acknowledgements);
+      await acknowledgementStorage.pruneAcknowledgedFrontiers();
+    }
   }
 
   SyncAdapter<T> _adapterFor<T>() {
@@ -140,12 +143,6 @@ class SyncEngine {
           reason: failure.reason,
           rolledBack: true));
     }
-  }
-
-  /// Reserved for Phase 4's persisted, per-replica acknowledgement frontier.
-  Future<void> _pruneAcknowledgedFrontiers() async {
-    // TODO(sync-engine#phase4): prune only after every known replica has
-    // acknowledged a vector clock that succeeds the frontier entry.
   }
 
   Future<void> dispose() async {

@@ -2,10 +2,9 @@ targets:
   $default:
     builders:
       sync_engine_generator|syncable:
+        enabled: true
         options:
           generate_drift_table: true
           schema_manifest: lib/sync_engine_schema.json
-          # Set true only while creating the first checked-in manifest.
-          bootstrap_schema: false
         generate_for:
           - lib/**.dart

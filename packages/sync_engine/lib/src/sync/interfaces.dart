@@ -11,6 +11,12 @@ abstract class SyncStorage {
   Stream<List<T>> watch<T>();
 }
 
+/// Optional durable acknowledgement support used by `SyncEngine.sync()`.
+abstract class SyncAcknowledgementStorage {
+  Future<void> recordAcknowledgements(List<ReplicaAcknowledgement> acknowledgements);
+  Future<void> pruneAcknowledgedFrontiers();
+}
+
 /// Server-facing contract implemented by pluggable transport adapters.
 abstract class SyncTransport {
   Future<SyncBatch> pull({required String lastSyncToken});
@@ -19,10 +25,30 @@ abstract class SyncTransport {
 }
 
 class SyncBatch {
-  const SyncBatch({this.operations = const [], this.nextSyncToken = ''});
+  const SyncBatch({
+    this.operations = const [],
+    this.nextSyncToken = '',
+    this.acknowledgements = const [],
+  });
 
   final List<SyncOperation> operations;
   final String nextSyncToken;
+  final List<ReplicaAcknowledgement> acknowledgements;
+}
+
+/// A replica acknowledgement for a persisted entity vector clock.
+class ReplicaAcknowledgement {
+  const ReplicaAcknowledgement({
+    required this.entityType,
+    required this.entityId,
+    required this.nodeId,
+    required this.acknowledgedClock,
+  });
+
+  final String entityType;
+  final String entityId;
+  final String nodeId;
+  final VectorClock acknowledgedClock;
 }
 
 class SyncNotification {
@@ -48,9 +74,10 @@ class SyncOperationResult {
 }
 
 class SyncResult {
-  const SyncResult({this.results = const []});
+  const SyncResult({this.results = const [], this.acknowledgements = const []});
 
   final List<SyncOperationResult> results;
+  final List<ReplicaAcknowledgement> acknowledgements;
 
   factory SyncResult.accepted(List<SyncOperation> operations) => SyncResult(
         results: [

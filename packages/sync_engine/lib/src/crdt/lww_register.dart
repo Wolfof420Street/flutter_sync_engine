@@ -72,7 +72,13 @@ class LWWRegister<T> {
 
   static _Version<T> _winner<T>(List<_Version<T>> candidates) =>
       candidates.reduce((winner, candidate) =>
-          winner.nodeId.compareTo(candidate.nodeId) < 0 ? candidate : winner);
+          winningNodeId(winner.nodeId, candidate.nodeId) == candidate.nodeId
+              ? candidate
+              : winner);
+
+  /// Returns the lexicographically greater node ID used for concurrent ties.
+  static String winningNodeId(String first, String second) =>
+      first.compareTo(second) < 0 ? second : first;
 
   static bool _sameVersion<T>(_Version<T> a, _Version<T> b) =>
       a.nodeId == b.nodeId && a.timestamp == b.timestamp && a.value == b.value;

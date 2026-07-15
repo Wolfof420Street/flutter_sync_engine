@@ -93,4 +93,10 @@ class TaskAdapter implements SyncAdapter<Task> {
 
   @override
   String idOf(Task entity) => entity.id;
+
+  @override
+  Map<String, dynamic> toJson(Task entity) => {'id': entity.id, 'title': entity.title};
+
+  @override
+  Task fromJson(Map<String, dynamic> json) => Task(json['id'] as String, json['title'] as String);
 }

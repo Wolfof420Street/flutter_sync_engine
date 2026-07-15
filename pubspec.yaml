@@ -6,6 +6,7 @@ environment:
 workspace:
   - packages/sync_engine
   - packages/sync_engine_generator
+  - packages/sync_engine_drift
 
 dev_dependencies:
-  lints: ^5.0.0
+  lints: ^6.0.0

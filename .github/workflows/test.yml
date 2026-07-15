@@ -1,0 +1,58 @@
+name: test
+
+# This workflow is authored locally but has not yet had a real GitHub Actions
+# run: this checkout has no configured Git remote. Treat the first remote run
+# as required verification, especially for SQLite and localhost HTTP behavior.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      # CI uses Ubuntu's SQLite library. The local test helper only overrides
+      # loading when a sandbox-specific project-local binary exists, so it is
+      # inert on this runner.
+      - name: Install SQLite runtime
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-0
+
+      - name: Install Melos
+        run: dart pub global activate melos
+
+      - name: Bootstrap workspace
+        run: dart pub global run melos bootstrap
+
+      - name: Analyze packages
+        run: dart pub global run melos exec --fail-fast -- dart analyze
+
+      - name: Test packages
+        run: dart pub global run melos exec --fail-fast --ignore=sync_engine_generator -- dart test
+
+      # Fixtures are standalone packages, so Melos does not bootstrap their
+      # package configs on a fresh checkout.
+      - name: Resolve generator fixtures
+        working-directory: packages/sync_engine_generator
+        run: |
+          for fixture in test/fixtures/good test/fixtures/invalid_id test/fixtures/drift_bootstrap test/fixtures/drift_additive test/fixtures/drift_remove; do
+            (cd "$fixture" && dart pub get)
+          done
+
+      - name: Test generator migration fixtures
+        working-directory: packages/sync_engine_generator
+        run: dart test -r expanded
+
+      # The test owns the Shelf process lifecycle. Setting this opt-in flag
+      # makes the real localhost TaskTransport/Shelf contract run on CI.
+      - name: Test task-manager example including live HTTP transport
+        working-directory: example/task_manager
+        env:
+          RUN_HTTP_INTEGRATION: 'true'
+        run: flutter test -r expanded

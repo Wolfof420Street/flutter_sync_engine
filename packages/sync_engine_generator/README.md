@@ -26,3 +26,13 @@ dart run sync_engine_generator:bootstrap_schema lib/sync_engine_schema.json Task
 
 Run the command once for each `@Syncable` type; it preserves existing entries
 and rejects a duplicate type baseline.
+
+After adding fields, update the reviewed manifest explicitly. Generation never
+rewrites the checked-in baseline automatically:
+
+```sh
+dart run sync_engine_generator:update_schema lib/sync_engine_schema.json Task id,title,tags,completed
+```
+
+The command accepts additive field sets only; a removed or renamed baseline
+field is rejected.

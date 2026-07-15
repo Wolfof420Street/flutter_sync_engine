@@ -1,39 +1,57 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# sync_engine_drift
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages).
+Drift persistence adapter for `sync_engine`. It provides `DriftSyncStorage`, a
+`SyncStorage` implementation for optimistic local entities, tombstones, and
+durable replica acknowledgements.
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages).
--->
+## Storage model
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+The adapter stores all synced entity types in a shared `sync_entity_table`:
 
-## Features
+- `entity_type` and `id` form the primary key;
+- `payload` holds serialized domain JSON;
+- `vector_clock` holds serialized causal metadata;
+- `deleted` is the tombstone flag; and
+- `last_modified` is an integer Unix timestamp.
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+It also persists `replica_acknowledgements` and `lww_frontier_entries`. A
+causally stale `save` is rejected rather than overwriting a newer durable row.
 
-## Getting started
+## Acknowledgement pruning
 
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
+`DriftSyncStorage` implements `SyncAcknowledgementStorage`. Frontier entries
+are pruned only when every member of the configured `knownReplicas` roster has
+acknowledged a clock that causally dominates the individual entry. An empty
+roster disables pruning: distinct acknowledgement rows alone are not a safe
+definition of every replica that could still need the data.
 
-## Usage
+The surviving concurrent value is selected by the shared
+`LWWRegister.winningNodeId` comparator, so storage pruning and CRDT
+materialization use the same deterministic tie-break rule.
 
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
+## Drift generation and schema manifests
 
-```dart
-const like = 'sample';
+Enable the generator's Drift output in the consuming package's `build.yaml`:
+
+```yaml
+targets:
+  $default:
+    builders:
+      sync_engine_generator|syncable:
+        options:
+          generate_drift_table: true
+          schema_manifest: lib/sync_engine_schema.json
 ```
 
-## Additional information
+For a first build, temporarily set `bootstrap_schema: true`, then create and
+review the checked-in baseline with `bootstrap_schema`. Later additive field
+changes are reviewed through `update_schema`; removals and rename-shaped
+changes fail generation.
 
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+```sh
+dart run sync_engine_generator:bootstrap_schema lib/sync_engine_schema.json Task id,title
+dart run sync_engine_generator:update_schema lib/sync_engine_schema.json Task id,title,completed
+```
+
+See [DESIGN.md](DESIGN.md) for the MVP migration boundary: validation is
+additive-name-only, and type changes require an explicit application migration.

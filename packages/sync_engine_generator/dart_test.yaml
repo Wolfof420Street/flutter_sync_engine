@@ -1,0 +1,4 @@
+# Fixture packages are exercised from their own package roots in CI. Excluding
+# them here keeps `dart test` at the generator root from resolving their
+# package imports with the parent package configuration.
+exclude_tags: fixture

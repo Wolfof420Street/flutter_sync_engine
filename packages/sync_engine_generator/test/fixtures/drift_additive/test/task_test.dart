@@ -1,3 +1,5 @@
+@Tags(['fixture'])
+
 import 'dart:convert';
 import 'dart:io';
 

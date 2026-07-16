@@ -1,3 +1,5 @@
+@Tags(['fixture'])
+
 import 'package:sync_engine/sync_engine.dart';
 import 'package:sync_engine_generator_good_fixture/task.dart';
 import 'package:test/test.dart';

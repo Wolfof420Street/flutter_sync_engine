@@ -1,0 +1,7 @@
+targets:
+  $default:
+    builders:
+      sync_engine_generator|syncable:
+        enabled: true
+        generate_for:
+          - lib/todo.dart

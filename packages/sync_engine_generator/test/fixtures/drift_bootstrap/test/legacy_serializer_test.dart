@@ -1,3 +1,5 @@
+@Tags(['fixture'])
+
 import 'package:drift_bootstrap_fixture/task.dart';
 import 'package:test/test.dart';
 

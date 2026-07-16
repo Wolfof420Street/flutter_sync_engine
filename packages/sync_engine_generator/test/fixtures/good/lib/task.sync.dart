@@ -33,6 +33,21 @@ class TaskSerializer {
         'tags': entity.tags.toList(),
       };
 
+  /// Envelope form used by transports that persist field-local LWW metadata.
+  Map<String, dynamic> toSyncJson(
+          Task entity, Map<String, FieldLwwMetadata> fieldMetadata) =>
+      <String, dynamic>{
+        ...toJson(entity),
+        '_fieldMetadata':
+            fieldMetadata.map((key, value) => MapEntry(key, value.toJson())),
+      };
+
+  Map<String, FieldLwwMetadata> fieldMetadataFromJson(
+          Map<String, dynamic> json) =>
+      ((json['_fieldMetadata'] as Map<String, dynamic>?) ?? const {}).map(
+          (key, value) => MapEntry(
+              key, FieldLwwMetadata.fromJson(value as Map<String, dynamic>)));
+
   Task fromJson(Map<String, dynamic> json) => Task(
       id: (json['id'] as String?) ?? '',
       title: (json['title'] as String?) ?? '',

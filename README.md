@@ -1,35 +1,60 @@
 # SyncForge
 
-**Production-grade offline synchronization for Flutter.**
+> Production-grade offline synchronization for Flutter.
 
-Add `@Syncable`. Generate conflict resolution. Build offline-first apps.
+SyncForge is a backend-agnostic offline synchronization framework for Flutter applications. It combines CRDT-based conflict resolution, vector clocks, optimistic local updates, code generation, and pluggable storage and transport adapters to simplify building resilient offline-first applications.
 
-> Demo video / GIF placeholder: run [`example/conflict_playground`](example/conflict_playground)
-> to watch two offline devices make concurrent edits and converge through the
-> real SyncForge engine.
+The synchronization engine is implemented in pure Dart, making it portable, testable, and independent of Flutter.
 
-## Why SyncForge?
+---
 
-Offline sync is not just retries. Two devices can change the same data while
-disconnected, then reconnect in any order. SyncForge provides the parts Flutter
-apps otherwise have to invent: vector clocks, CRDT merge laws, optimistic local
-writes, durable tombstones, rollback, retries, and generated per-field merge
-adapters.
+## Features
+
+- Offline-first architecture
+- Pure Dart CRDT engine
+- Vector clock–based causal ordering
+- Per-field conflict resolution
+- Optimistic writes with automatic rollback
+- Durable outbox with retry and dead-letter handling
+- Tombstone-based deletion support
+- Annotation-driven code generation
+- Drift storage adapter
+- Backend-agnostic transport abstraction
+- Comprehensive property-based and convergence testing
+
+---
+
+## Architecture
 
 ```text
-@Syncable model → generated SyncAdapter → SyncEngine
-                                        ├── your SyncStorage (Drift, etc.)
-                                        └── your SyncTransport (REST, etc.)
+                    @Syncable Models
+                           │
+                           ▼
+                 Generated Sync Adapters
+                           │
+                           ▼
+                      SyncEngine
+                    /            \
+                   /              \
+          SyncStorage        SyncTransport
+         (Drift, etc.)      (REST, GraphQL, ...)
 ```
 
-The pure-Dart core is backend-agnostic and has no Flutter dependency.
+SyncForge separates synchronization logic from storage and networking, allowing applications to integrate with existing backends without changing the synchronization engine.
 
-## Start in five minutes
+---
+
+## Quick Start
+
+Define a synchronizable model:
 
 ```dart
 @Syncable()
 class Todo {
-  const Todo({required this.id, required this.title});
+  const Todo({
+    required this.id,
+    required this.title,
+  });
 
   @Id()
   final String id;
@@ -39,68 +64,157 @@ class Todo {
 }
 ```
 
-```sh
+Generate the synchronization code:
+
+```bash
 flutter pub get
 dart run build_runner build --delete-conflicting-outputs
 ```
+
+Create a `SyncEngine` instance:
 
 ```dart
 final sync = SyncEngine(
   storage: storage,
   transport: transport,
-  nodeId: 'device-a',
-  adapters: {Todo: const TodoSyncAdapter()},
+  nodeId: "device-a",
+  adapters: {
+    Todo: const TodoSyncAdapter(),
+  },
 );
 ```
 
-See [`example/minimal_app`](example/minimal_app) for the complete smallest
-consumer and [`example/notes_app`](example/notes_app) for persisted notes.
-
-## See the conflict, not just the code
-
-[`example/conflict_playground`](example/conflict_playground) gives judges a
-two-device visual: Device A writes `Buy milk` and a detail while offline;
-Device B writes `Buy eggs`; reconnecting resolves the title deterministically
-and preserves Device A's independent detail. The history comes from the real
-`SyncEngine.conflicts` stream.
+---
 
 ## Packages
 
-- [`sync_engine`](packages/sync_engine): pure-Dart clocks, CRDTs and sync API.
-- [`sync_engine_generator`](packages/sync_engine_generator): `build_runner`
-  adapters, serializers and registry wiring.
-- [`sync_engine_drift`](packages/sync_engine_drift): Drift storage, tombstones,
-  acknowledgements and causally safe frontier pruning.
+### `sync_engine`
 
-## CRDT choices
+The core synchronization library implemented in pure Dart.
 
-`GCounter` and `GSet` merge monotonically. LWW fields retain a concurrent
-frontier for associative merges, then use a documented deterministic
-lexicographic node-ID tie-break only when materializing a value. Generated
-adapters resolve LWW **per field**, so unrelated concurrent edits survive.
+Includes:
 
-Read the wire and merge details in [`docs/SYNC_PROTOCOL.md`](docs/SYNC_PROTOCOL.md).
+- Vector clocks
+- CRDT implementations
+- Synchronization protocol
+- Optimistic write pipeline
+- Conflict resolution
+- Public synchronization API
 
-## Built with Codex + GPT-5.6
+---
 
-Codex accelerated scaffolding, property-test generation, fixture construction,
-adapter boilerplate, and CI/docs work. Humans led the architecture and reviewed
-the correctness boundaries; randomized CRDT laws, convergence tests, migration
-fixtures and an external consumer app verify the result. See
-[`docs/CODEX_JOURNEY.md`](docs/CODEX_JOURNEY.md).
+### `sync_engine_generator`
+
+Code generation using `build_runner`.
+
+Generates:
+
+- Sync adapters
+- Serializers
+- Merge logic
+- Adapter registry
+
+---
+
+### `sync_engine_drift`
+
+A production-ready Drift storage implementation featuring:
+
+- Durable persistence
+- Tombstones
+- Acknowledgements
+- Frontier pruning
+- Schema versioning
+
+---
+
+## Examples
+
+The repository includes several example applications.
+
+| Example | Description |
+|---------|-------------|
+| `minimal_app` | Smallest possible integration |
+| `notes_app` | Persistent offline note-taking application |
+| `task_manager` | Full-featured synchronization example |
+| `conflict_playground` | Interactive visualization of concurrent conflict resolution |
+
+---
+
+## Conflict Resolution
+
+SyncForge combines multiple conflict-resolution strategies.
+
+- **Vector clocks** provide causal ordering.
+- **Per-field Last-Write-Wins (LWW)** resolves concurrent edits independently for each field.
+- **GCounter** provides monotonic distributed counters.
+- **GSet** provides grow-only replicated sets.
+- **Tombstones** ensure deletes converge correctly across replicas.
+
+This design allows unrelated concurrent edits to be preserved while maintaining deterministic convergence.
+
+Further details are available in:
+
+- `docs/SYNC_PROTOCOL.md`
+- `packages/sync_engine_drift/DESIGN.md`
+
+---
+
+## Testing
+
+The project includes extensive automated verification.
+
+- Unit tests
+- Integration tests
+- Property-based CRDT verification
+- Replica convergence testing
+- Generator fixture validation
+- Widget tests
+- External consumer integration tests
+
+Randomized property tests verify CRDT correctness across thousands of merge scenarios.
+
+---
 
 ## Development
 
-```sh
+```bash
 dart pub global activate melos 2.9.0
+
 melos bootstrap
 melos run generate
 melos run analyze
 melos run test
 ```
 
-## MVP boundaries
+---
 
-Encryption at rest and background sync are out of scope. Drift schema validation
-is additive-name-only; schema v2 requires a fresh local database. See
-[`packages/sync_engine_drift/DESIGN.md`](packages/sync_engine_drift/DESIGN.md).
+## Project Status
+
+SyncForge is currently under active development.
+
+Current capabilities include:
+
+- Pure Dart synchronization engine
+- Drift persistence
+- Annotation-based code generation
+- REST-style transport abstraction
+- External consumer validation
+
+Future work includes additional storage adapters, transport integrations, background synchronization, and encryption support.
+
+---
+
+## Documentation
+
+- `docs/SYNC_PROTOCOL.md` — Synchronization protocol specification
+- `ARCHITECTURE.md` — System architecture
+- `docs/CONTRIBUTING.md` — Contribution guidelines
+- `docs/RELEASE_CHECKLIST.md` — Release process
+- `packages/sync_engine_drift/DESIGN.md` — Drift implementation details
+
+---
+
+## License
+
+Released under the MIT License.

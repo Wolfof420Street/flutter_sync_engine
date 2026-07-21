@@ -316,9 +316,15 @@ If you are evaluating SyncForge for a production app:
 
 ---
 
-## Roadmap
+## Roadmap and Acknowledgement
 
-The current codebase is production-ready for the supported core workflow. Future work centers on additional storage adapters, transport integrations, observability hooks, and richer enterprise deployment guidance.
+The current codebase is production-ready for the supported core workflow. Codex and GPT 5.6  accelerated development by helping generate:
+- CRDT implementation scaffolding
+- test infrastructure
+- generated adapter patterns
+- documentation
+
+Future work centers on additional storage adapters, transport integrations, observability hooks, and richer enterprise deployment guidance.
 
 ---
 

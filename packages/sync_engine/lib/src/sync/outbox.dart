@@ -20,8 +20,22 @@ class SyncFailure {
   final int attempts;
 }
 
+/// Common contract for in-memory and durable outboxes.
+abstract class SyncOperationQueue {
+  Stream<SyncOperation> get pending;
+  Stream<SyncOperation> get deadLetter;
+  Stream<SyncFailure> get errors;
+  List<SyncOperation> get pendingOperations;
+  List<SyncOperation> get deadLetters;
+  List<SyncFailure> get failures;
+
+  Future<void> queue(SyncOperation operation);
+  Future<void> flush(SyncTransport transport);
+  Future<void> dispose();
+}
+
 /// In-memory outbox with configurable retry and dead-letter handling.
-class SyncOutbox {
+class SyncOutbox implements SyncOperationQueue {
   SyncOutbox({
     this.baseBackoff = const Duration(seconds: 2),
     this.maxBackoff = const Duration(seconds: 60),
@@ -44,29 +58,51 @@ class SyncOutbox {
   final _deadLetterController = StreamController<SyncOperation>.broadcast();
   final _errorController = StreamController<SyncFailure>.broadcast();
 
+  @override
   Stream<SyncOperation> get pending => _pendingController.stream;
+
+  @override
   Stream<SyncOperation> get deadLetter => _deadLetterController.stream;
+
+  @override
   Stream<SyncFailure> get errors => _errorController.stream;
+
+  @override
   List<SyncOperation> get pendingOperations => List.unmodifiable(_pending);
+
+  @override
   List<SyncOperation> get deadLetters => List.unmodifiable(_deadLetters);
+
+  @override
   List<SyncFailure> get failures => List.unmodifiable(_failures);
 
-  void queue(SyncOperation operation) {
+  @override
+  Future<void> queue(SyncOperation operation) async {
     _pending.add(operation);
     _pendingController.add(operation);
   }
 
   /// Flushes the current queue. Transient transport exceptions are retried with
   /// exponential backoff; permanent rejection is surfaced immediately.
+  @override
   Future<void> flush(SyncTransport transport) async {
     while (_pending.isNotEmpty) {
       final operation = _pending.first;
       try {
         final result = await transport.push([operation]);
-        final operationResult = result.results.isEmpty
-            ? SyncOperationResult(
-                operation: operation, disposition: SyncDisposition.accepted)
-            : result.results.single;
+        if (result.results.length != 1) {
+          throw StateError(
+            'Transport returned ${result.results.length} results for a single operation.',
+          );
+        }
+        final operationResult = result.results.single;
+        if (operationResult.operation.entityType != operation.entityType ||
+            operationResult.operation.entityId != operation.entityId ||
+            operationResult.operation.vectorClock != operation.vectorClock) {
+          throw StateError(
+            'Transport returned a result for a different operation.',
+          );
+        }
         _pending.removeAt(0);
         _attempts.remove(operation);
         switch (operationResult.disposition) {
@@ -75,7 +111,7 @@ class SyncOutbox {
           case SyncDisposition.conflict:
             final clock =
                 operationResult.updatedVectorClock ?? operation.vectorClock;
-            queue(operation.withVectorClock(clock));
+            await queue(operation.withVectorClock(clock));
             break;
           case SyncDisposition.rejected:
             _recordFailure(operation, SyncFailureKind.rejected,
@@ -109,6 +145,7 @@ class SyncOutbox {
     _errorController.add(failure);
   }
 
+  @override
   Future<void> dispose() async {
     await _pendingController.close();
     await _deadLetterController.close();

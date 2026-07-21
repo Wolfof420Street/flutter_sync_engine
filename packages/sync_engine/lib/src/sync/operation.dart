@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../vector_clock.dart';
 import 'adapter.dart';
 
@@ -9,6 +11,7 @@ sealed class SyncOperation {
     required this.vectorClock,
     this.nodeId = '',
     this.fieldMetadata = const {},
+    this.serializedEntity,
     this.entity,
   });
 
@@ -17,11 +20,46 @@ sealed class SyncOperation {
   final VectorClock vectorClock;
   final String nodeId;
   final Map<String, FieldLwwMetadata> fieldMetadata;
+  final Map<String, dynamic>? serializedEntity;
 
   /// The in-memory entity payload. Phase 3 serializers will produce wire JSON.
   final Object? entity;
 
   SyncOperation withVectorClock(VectorClock clock);
+
+  @override
+  bool operator ==(Object other) =>
+      other.runtimeType == runtimeType &&
+      other is SyncOperation &&
+      other.entityType == entityType &&
+      other.entityId == entityId &&
+      other.vectorClock == vectorClock &&
+      other.nodeId == nodeId &&
+      _sameFieldMetadata(other.fieldMetadata) &&
+      jsonEncode(other.serializedEntity) == jsonEncode(serializedEntity);
+
+  @override
+  int get hashCode => Object.hash(
+        runtimeType,
+        entityType,
+        entityId,
+        vectorClock,
+        nodeId,
+        Object.hashAll(
+          fieldMetadata.entries.map(
+            (entry) => Object.hash(entry.key, entry.value),
+          ),
+        ),
+        jsonEncode(serializedEntity),
+      );
+
+  bool _sameFieldMetadata(Map<String, FieldLwwMetadata> other) {
+    if (fieldMetadata.length != other.length) return false;
+    for (final entry in fieldMetadata.entries) {
+      if (other[entry.key] != entry.value) return false;
+    }
+    return true;
+  }
 }
 
 class InsertOperation extends SyncOperation {
@@ -31,6 +69,7 @@ class InsertOperation extends SyncOperation {
     required super.vectorClock,
     super.nodeId,
     super.fieldMetadata,
+    super.serializedEntity,
     required super.entity,
   });
 
@@ -41,6 +80,7 @@ class InsertOperation extends SyncOperation {
         vectorClock: clock,
         nodeId: nodeId,
         fieldMetadata: fieldMetadata,
+        serializedEntity: serializedEntity,
         entity: entity,
       );
 }
@@ -52,6 +92,7 @@ class UpdateOperation extends SyncOperation {
     required super.vectorClock,
     super.nodeId,
     super.fieldMetadata,
+    super.serializedEntity,
     required super.entity,
   });
 
@@ -62,6 +103,7 @@ class UpdateOperation extends SyncOperation {
         vectorClock: clock,
         nodeId: nodeId,
         fieldMetadata: fieldMetadata,
+        serializedEntity: serializedEntity,
         entity: entity,
       );
 }
@@ -74,6 +116,7 @@ class DeleteOperation extends SyncOperation {
     required super.vectorClock,
     super.nodeId,
     super.fieldMetadata,
+    super.serializedEntity,
   }) : super(entity: null);
 
   @override
@@ -83,5 +126,6 @@ class DeleteOperation extends SyncOperation {
         vectorClock: clock,
         nodeId: nodeId,
         fieldMetadata: fieldMetadata,
+        serializedEntity: serializedEntity,
       );
 }

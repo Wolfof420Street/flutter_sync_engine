@@ -1,5 +1,7 @@
 # sync_engine_generator
 
+[![pub.dev](https://img.shields.io/pub/v/sync_engine_generator.svg)](https://pub.dev/packages/sync_engine_generator)
+
 `build_runner` generator for `@Syncable` entities. It emits sync models,
 serializers, CRDT-backed adapters, and registration helpers for `sync_engine`.
 
@@ -36,3 +38,6 @@ dart run sync_engine_generator:update_schema lib/sync_engine_schema.json Task id
 
 The command accepts additive field sets only; a removed or renamed baseline
 field is rejected.
+
+If a field uses `@ConflictStrategy(ConflictType.custom)`, generation fails
+explicitly. That unsupported merge path no longer defers to a runtime crash.

@@ -1,8 +1,6 @@
-// ignore_for_file: deprecated_member_use
-
+import 'dart:convert';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:build/build.dart';
-import 'dart:convert';
 import 'package:source_gen/source_gen.dart';
 import 'package:sync_engine/sync_engine.dart';
 
@@ -17,8 +15,10 @@ class SyncableGenerator extends GeneratorForAnnotation<Syncable> {
   final bool generateDriftTable;
   final String schemaManifest;
   final bool bootstrapSchema;
-  static final _idChecker = TypeChecker.fromRuntime(Id);
-  static final _strategyChecker = TypeChecker.fromRuntime(ConflictStrategy);
+  static final _idChecker =
+      TypeChecker.typeNamed(Id, inPackage: 'sync_engine');
+  static final _strategyChecker =
+      TypeChecker.typeNamed(ConflictStrategy, inPackage: 'sync_engine');
 
   @override
   Future<String> generateForAnnotatedElement(
@@ -33,54 +33,65 @@ class SyncableGenerator extends GeneratorForAnnotation<Syncable> {
     final fields = element.fields.where((field) => !field.isStatic).toList();
     if (generateDriftTable) {
       await _validateSchemaManifest(
-          buildStep, element.name, fields.map((field) => field.name).toSet());
+          buildStep, element.displayName, fields.map((field) => field.displayName).toSet());
     }
     final idFields =
         fields.where((field) => _idChecker.hasAnnotationOf(field)).toList();
     if (idFields.length != 1) {
       throw InvalidGenerationSourceError(
-        '@Syncable class ${element.name} must declare exactly one @Id() field; found ${idFields.length}.',
+        '@Syncable class ${element.displayName} must declare exactly one @Id() field; found ${idFields.length}.',
         element: element,
       );
     }
     final idField = idFields.single;
     if (_typeName(idField) != 'String') {
       throw InvalidGenerationSourceError(
-        '@Id() field ${element.name}.${idField.name} must have type String.',
+        '@Id() field ${element.displayName}.${idField.displayName} must have type String.',
         element: idField,
       );
     }
 
-    final type = element.name;
+    final type = element.displayName;
     final model = '${type}SyncModel';
     final adapter = '${type}SyncAdapter';
     final serializer = '${type}Serializer';
     final fieldDeclarations = fields
-        .map((field) => '  final ${_typeName(field)} ${field.name};')
+        .map((field) => '  final ${_typeName(field)} ${field.displayName};')
         .join('\n');
     final constructorParameters =
-        fields.map((field) => 'required this.${field.name}').join(', ');
+        fields.map((field) => 'required this.${field.displayName}').join(', ');
     final fromEntity =
-        fields.map((field) => '${field.name}: entity.${field.name}').join(', ');
+        fields.map((field) => '${field.displayName}: entity.${field.displayName}').join(', ');
     final modelJson = fields
-        .map((field) => "'${field.name}': ${_jsonValue(field)}")
+        .map((field) => "'${field.displayName}': ${_jsonValue(field)}")
         .join(', ');
     final fromJson =
-        fields.map((field) => '${field.name}: ${_fromJson(field)}').join(', ');
-    final mergedFields = fields.map(_mergedField).join(',\n      ');
+        fields.map((field) => '${field.displayName}: ${_fromJson(field)}').join(', ');
     final lwwFields = fields
         .where((field) => _strategy(field) == ConflictType.lastWriteWins)
         .toList();
+    final customFields = fields
+        .where((field) => _strategy(field) == ConflictType.custom)
+        .toList();
+    if (customFields.isNotEmpty) {
+      throw InvalidGenerationSourceError(
+        '@Syncable class ${element.displayName} uses ConflictType.custom on '
+        '${customFields.map((field) => field.displayName).join(', ')}. '
+        'Custom merge must be implemented explicitly before generation.',
+        element: customFields.first,
+      );
+    }
+    final mergedFields = fields.map(_mergedField).join(',\n      ');
     final localMetadata = lwwFields
         .map((field) =>
-            "'${field.name}': previous == null || previous.${field.name} != entity.${field.name} ? FieldLwwMetadata(timestamp: clock, nodeId: nodeId) : previousMetadata['${field.name}']!")
+            "'${field.displayName}': previous == null || previous.${field.displayName} != entity.${field.displayName} ? FieldLwwMetadata(timestamp: clock, nodeId: nodeId) : previousMetadata['${field.displayName}']!")
         .join(', ');
     final winnerDeclarations = lwwFields
         .map((field) =>
-            "final ${field.name}Winner = FieldLwwMetadata.winner(local.fieldMetadata['${field.name}']!, remote.fieldMetadata['${field.name}']!);")
+            "final ${field.displayName}Winner = FieldLwwMetadata.winner(local.fieldMetadata['${field.displayName}']!, remote.fieldMetadata['${field.displayName}']!);")
         .join('\n    ');
     final mergedMetadata = lwwFields
-        .map((field) => "'${field.name}': ${field.name}Winner")
+        .map((field) => "'${field.displayName}': ${field.displayName}Winner")
         .join(', ');
     final driftTable = generateDriftTable ? _driftTable(type) : '';
 
@@ -127,7 +138,7 @@ class $adapter implements SyncAdapter<$type> {
   String get entityType => '${_snakeCase(type)}';
 
   @override
-  String idOf($type entity) => entity.${idField.name};
+  String idOf($type entity) => entity.${idField.displayName};
 
   @override
   Map<String, dynamic> toJson($type entity) => const $serializer().toJson(entity);
@@ -149,7 +160,7 @@ class $adapter implements SyncAdapter<$type> {
       toModel(local, localClock, localNodeId, localFieldMetadata),
       toModel(remote, remoteClock, remoteNodeId, remoteFieldMetadata),
     );
-    return SyncMergeResult($type(${fields.map((field) => '${field.name}: merged.${field.name}').join(', ')}), merged.fieldMetadata);
+    return SyncMergeResult($type(${fields.map((field) => '${field.displayName}: merged.${field.displayName}').join(', ')}), merged.fieldMetadata);
   }
 
   $model toModel($type entity, VectorClock vectorClock, String nodeId,
@@ -217,16 +228,16 @@ class $table extends Table {
   }
 
   String _mergedField(FieldElement field) {
-    final name = field.name;
+    final name = field.displayName;
     final strategy = _strategy(field);
     return switch (strategy) {
       ConflictType.growOnlyCounter => '$name: local.$name.merge(remote.$name)',
       ConflictType.growOnlySet =>
         '$name: GSet(local.$name).merge(GSet(remote.$name)).value',
-      ConflictType.custom =>
-        '$name: throw UnsupportedError(\'TODO: implement custom merge for $name\')',
       ConflictType.lastWriteWins =>
         '$name: ${name}Winner == local.fieldMetadata[\'$name\'] ? local.$name : remote.$name',
+      ConflictType.custom =>
+        throw StateError('custom merge fields are rejected during generation'),
     };
   }
 
@@ -240,14 +251,14 @@ class $table extends Table {
   String _typeName(FieldElement field) => field.type.getDisplayString();
 
   String _jsonValue(FieldElement field) {
-    final name = field.name;
+    final name = field.displayName;
     if (_typeName(field).startsWith('Set<')) return 'entity.$name.toList()';
     return 'entity.$name';
   }
 
   String _fromJson(FieldElement field) {
     final type = _typeName(field);
-    final name = field.name;
+    final name = field.displayName;
     if (type.startsWith('Set<') && type.endsWith('>')) {
       final elementType = type.substring(4, type.length - 1);
       return '((json[\'$name\'] as List?) ?? const <dynamic>[]).cast<$elementType>().toSet()';

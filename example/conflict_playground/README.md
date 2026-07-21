@@ -10,7 +10,7 @@ contain a second CRDT implementation.
 ```sh
 cd example/conflict_playground
 flutter pub get
-dart run build_runner build --delete-conflicting-outputs
+flutter pub run build_runner build --delete-conflicting-outputs
 flutter run
 ```
 

@@ -1,5 +1,7 @@
 # sync_engine_drift
 
+[![pub.dev](https://img.shields.io/pub/v/sync_engine_drift.svg)](https://pub.dev/packages/sync_engine_drift)
+
 Drift persistence adapter for `sync_engine`. It provides `DriftSyncStorage`, a
 `SyncStorage` implementation for optimistic local entities, tombstones, and
 durable replica acknowledgements.
@@ -16,6 +18,11 @@ The adapter stores all synced entity types in a shared `sync_entity_table`:
 
 It also persists `replica_acknowledgements` and `lww_frontier_entries`. A
 causally stale `save` is rejected rather than overwriting a newer durable row.
+
+`DriftSyncOutbox` stores pending operations in the same database. It persists
+serialized payloads, retry counts, next-attempt timestamps, last errors, and
+dead letters so queued work survives process restarts. Transport responses are
+validated before an operation is removed or retried.
 
 ## Acknowledgement pruning
 

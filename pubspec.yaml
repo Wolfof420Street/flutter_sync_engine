@@ -7,6 +7,16 @@ workspace:
   - packages/sync_engine
   - packages/sync_engine_generator
   - packages/sync_engine_drift
+  - example/minimal_app
+  - example/notes_app
+  - example/task_manager
+  - example/conflict_playground
 
 dev_dependencies:
   lints: ^6.0.0
+
+flutter:
+  # The workspace root is not an app, but declaring this keeps nested example
+  # packages from inheriting a false Material icon default during Flutter tool
+  # commands.
+  uses-material-design: true

@@ -25,6 +25,7 @@ class NotesApp extends StatefulWidget {
 
 class _NotesAppState extends State<NotesApp> {
   final _transport = NoteTransport();
+  final _navigatorKey = GlobalKey<NavigatorState>();
   late final SyncEngine _engine;
   final _conflicts = <ConflictResolution>[];
   StreamSubscription<ConflictResolution>? _subscription;
@@ -54,10 +55,13 @@ class _NotesAppState extends State<NotesApp> {
   }
 
   Future<void> _edit([Note? note]) async {
+    final materialContext = _navigatorKey.currentContext;
+    if (materialContext == null) return;
+
     final title = TextEditingController(text: note?.title);
     final body = TextEditingController(text: note?.body);
     final result = await showDialog<Note>(
-      context: context,
+      context: materialContext,
       builder: (context) => AlertDialog(
         title: Text(note == null ? 'New note' : 'Edit note'),
         content: Column(
@@ -108,7 +112,9 @@ class _NotesAppState extends State<NotesApp> {
       await _engine.sync();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        final materialContext = _navigatorKey.currentContext;
+        if (materialContext == null || !materialContext.mounted) return;
+        ScaffoldMessenger.of(materialContext).showSnackBar(
           const SnackBar(content: Text('Offline: operation remains queued.')),
         );
       }
@@ -116,8 +122,25 @@ class _NotesAppState extends State<NotesApp> {
     if (mounted) setState(() {});
   }
 
+  void _showConflicts() {
+    final materialContext = _navigatorKey.currentContext;
+    if (materialContext == null) return;
+
+    showModalBottomSheet<void>(
+      context: materialContext,
+      builder: (context) => ListView(
+        children: [
+          const ListTile(title: Text('Conflict log')),
+          for (final conflict in _conflicts)
+            ListTile(title: Text(conflict.reason)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => MaterialApp(
+    navigatorKey: _navigatorKey,
     home: Scaffold(
       appBar: AppBar(
         title: const Text('Offline notes'),
@@ -135,15 +158,7 @@ class _NotesAppState extends State<NotesApp> {
           IconButton(
             icon: const Icon(Icons.list_alt),
             tooltip: 'Conflict log',
-            onPressed: () => showModalBottomSheet(
-              context: context,
-              builder: (_) => ListView(
-                children: [
-                  for (final conflict in _conflicts)
-                    ListTile(title: Text(conflict.reason)),
-                ],
-              ),
-            ),
+            onPressed: _showConflicts,
           ),
         ],
       ),

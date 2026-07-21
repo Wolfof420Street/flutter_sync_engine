@@ -2,19 +2,28 @@ name: sync_engine_generator
 description: build_runner generators for sync_engine adapters and serializers.
 version: 0.1.0
 repository: https://github.com/Wolfof420Street/flutter_sync_engine.git
+homepage: https://github.com/Wolfof420Street/flutter_sync_engine#readme
+issue_tracker: https://github.com/Wolfof420Street/flutter_sync_engine/issues
+documentation: https://github.com/Wolfof420Street/flutter_sync_engine/tree/main/packages/sync_engine_generator
 resolution: workspace
+topics:
+  - code-generation
+  - build-runner
+  - synchronization
+  - offline-first
+  - dart
 
 environment:
-  sdk: ^3.5.0
+  sdk: ^3.7.0
 
 dependencies:
-  analyzer: ^7.0.0
-  build: ^2.4.0
-  source_gen: ^2.0.0
+  analyzer: ^8.0.0
+  build: ^3.0.0
+  source_gen: ^4.1.2
   sync_engine: ^0.1.0
 
 dev_dependencies:
-  build_runner: ^2.4.0
-  build_test: ^2.2.0
+  build_runner: ^2.5.4
+  build_test: ^3.3.0
   lints: ^6.0.0
   test: ^1.25.0

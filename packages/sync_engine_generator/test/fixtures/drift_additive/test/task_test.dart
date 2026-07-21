@@ -7,10 +7,11 @@ import 'package:drift_additive_fixture/task.dart';
 import 'package:test/test.dart';
 
 void main() {
+  final dart = _dartExecutable();
+
   test('generated adapter restores a payload emitted by the legacy adapter',
       () async {
     final legacy = Directory('../drift_bootstrap');
-    final dart = Platform.resolvedExecutable;
     final build = await Process.run(
       dart,
       const <String>[
@@ -40,5 +41,13 @@ void main() {
     expect(restored.id, 'task-1');
     expect(restored.title, 'Kept');
     expect(restored.completed, isFalse);
-  });
+  }, timeout: const Timeout(Duration(minutes: 5)));
+}
+
+String _dartExecutable() {
+  final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+  if (flutterRoot == null || flutterRoot.isEmpty) {
+    throw StateError('FLUTTER_ROOT is required to locate the Dart SDK.');
+  }
+  return '$flutterRoot/bin/cache/dart-sdk/bin/dart';
 }

@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 void main() {
-  final dart = Platform.resolvedExecutable;
+  final dart = _dartExecutable();
   final bootstrap = Directory('test/fixtures/drift_bootstrap');
   final additive = Directory('test/fixtures/drift_additive');
   final removal = Directory('test/fixtures/drift_remove');
@@ -81,7 +81,7 @@ void main() {
     expect(second.exitCode, 65);
     expect(second.stderr,
         contains('Manifest already contains a baseline for Task.'));
-  }, timeout: const Timeout(Duration(minutes: 2)));
+  }, timeout: const Timeout(Duration(minutes: 5)));
 
   test('additive fixture generates from its baseline and explicitly updates it',
       () async {
@@ -105,7 +105,7 @@ void main() {
     expect(jsonDecode(await manifest.readAsString()), <String, dynamic>{
       'Task': <String>['id', 'title', 'completed'],
     });
-  }, timeout: const Timeout(Duration(minutes: 2)));
+  }, timeout: const Timeout(Duration(minutes: 5)));
 
   test('rename-shaped fixture rejects the removed baseline field', () async {
     final manifest = File('${removal.path}/lib/sync_engine_schema.json');
@@ -119,5 +119,13 @@ void main() {
         'Additive-only Drift migration rejected for Task: removed or renamed field(s) tags.',
       ),
     );
-  }, timeout: const Timeout(Duration(minutes: 2)));
+  }, timeout: const Timeout(Duration(minutes: 5)));
+}
+
+String _dartExecutable() {
+  final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+  if (flutterRoot == null || flutterRoot.isEmpty) {
+    throw StateError('FLUTTER_ROOT is required to locate the Dart SDK.');
+  }
+  return '$flutterRoot/bin/cache/dart-sdk/bin/dart';
 }

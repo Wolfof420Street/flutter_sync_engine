@@ -5,11 +5,13 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 void main() {
+  final dart = _dartExecutable();
+
   test(
       'build rejects the rename-shaped schema change with the documented error',
       () async {
     final result = await Process.run(
-      Platform.resolvedExecutable,
+      dart,
       const <String>[
         'run',
         'build_runner',
@@ -26,4 +28,12 @@ void main() {
       ),
     );
   }, timeout: const Timeout(Duration(minutes: 2)));
+}
+
+String _dartExecutable() {
+  final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+  if (flutterRoot == null || flutterRoot.isEmpty) {
+    throw StateError('FLUTTER_ROOT is required to locate the Dart SDK.');
+  }
+  return '$flutterRoot/bin/cache/dart-sdk/bin/dart';
 }

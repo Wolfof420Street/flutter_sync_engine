@@ -8,13 +8,13 @@ same integration path used by an application developer.
 
 ```bash
 flutter pub get
-dart run build_runner build --delete-conflicting-outputs
+flutter pub run build_runner build --delete-conflicting-outputs
 flutter run
 ```
 
-The checked-in `dependency_overrides` entry points `sync_engine` to this
-repository during development. Remove that override and use a hosted version
-when consuming a published package.
+The workspace keeps `sync_engine` pointed at this repository during
+development. When consuming a published package, depend on the hosted version
+instead of the local workspace path.
 
 ## Walkthrough
 

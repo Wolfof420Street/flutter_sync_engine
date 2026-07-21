@@ -43,6 +43,9 @@ retry policy. This demo keeps the production defaults (2-second exponential
 backoff, 60-second cap, eight attempts), so a dead-letter demonstration takes
 time; widget tests use deterministic transports for fast coverage.
 
+The example uses the core in-memory outbox. For restart-safe durable pending
+operations, pair the engine with `sync_engine_drift`'s `DriftSyncOutbox`.
+
 ## Tests
 
 ```sh

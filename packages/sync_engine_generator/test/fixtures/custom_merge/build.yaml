@@ -1,0 +1,6 @@
+targets:
+  $default:
+    builders:
+      sync_engine_generator|syncable:
+        generate_for:
+          - lib/**.dart

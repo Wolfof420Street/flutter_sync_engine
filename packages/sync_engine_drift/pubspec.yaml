@@ -2,7 +2,15 @@ name: sync_engine_drift
 description: Drift persistence adapter for sync_engine.
 version: 0.1.0
 repository: https://github.com/Wolfof420Street/flutter_sync_engine.git
+homepage: https://github.com/Wolfof420Street/flutter_sync_engine#readme
+issue_tracker: https://github.com/Wolfof420Street/flutter_sync_engine/issues
+documentation: https://github.com/Wolfof420Street/flutter_sync_engine/tree/main/packages/sync_engine_drift
 resolution: workspace
+topics:
+  - drift
+  - sqlite
+  - offline-first
+  - synchronization
 
 environment:
   sdk: ^3.5.0

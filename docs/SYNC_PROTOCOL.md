@@ -30,6 +30,10 @@ The exact JSON property names are transport-defined, but all information above
 must survive a push/pull round trip. Generated serializers provide envelope
 helpers for field metadata.
 
+The engine also captures a serialized entity payload alongside each queued
+operation so durable outboxes can reconstruct transport-ready batches after a
+restart without rehydrating application state.
+
 ## Causality and concurrent writes
 
 Entity vector clocks determine whether one operation happened before another,
@@ -58,6 +62,15 @@ the MVP policy is delete-wins to avoid surprising resurrection of deleted data.
 seconds initially, capped at sixty seconds. After eight attempts by default,
 the operation moves to the dead-letter list and emits a `SyncFailure`. Server
 rejections emit a rollback/conflict event so the UI can explain the change.
+
+Sync is serialized. Concurrent `sync()` calls are coalesced into a single
+in-flight transport cycle. The cursor advances only after a cycle completes
+without introducing new failures, which prevents a failed push from skipping
+remote work on the next call.
+
+Transport responses are validated before the cursor or outbox state changes.
+Malformed batch responses, mismatched acknowledgements, duplicate deliveries,
+and partial failures are treated as protocol errors instead of silent success.
 
 ## Acknowledgements and pruning
 

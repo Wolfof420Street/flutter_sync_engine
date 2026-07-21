@@ -29,7 +29,7 @@ class SyncEngine {
   SyncEngine({
     required SyncStorage storage,
     required SyncTransport transport,
-    SyncOutbox? outbox,
+    SyncOperationQueue? outbox,
     this.nodeId = 'local',
     Map<Type, SyncAdapter<dynamic>> adapters = const {},
   })  : _storage = storage,
@@ -37,24 +37,25 @@ class SyncEngine {
         _outbox = outbox ?? SyncOutbox(),
         _adapters = Map<Type, SyncAdapter<dynamic>>.from(adapters) {
     _notificationSubscription = _transport.notifications.listen((_) {
-      unawaited(sync());
+      unawaited(sync().catchError((Object _) {}));
     });
   }
 
   final SyncStorage _storage;
   final SyncTransport _transport;
-  final SyncOutbox _outbox;
+  final SyncOperationQueue _outbox;
   final String nodeId;
   final Map<Type, SyncAdapter<dynamic>> _adapters;
   final Map<SyncOperation, _Rollback> _rollbacks = {};
   final _conflictController = StreamController<ConflictResolution>.broadcast();
   late final StreamSubscription<SyncNotification> _notificationSubscription;
+  Future<void>? _syncFuture;
   String _lastSyncToken = '';
   int _handledFailures = 0;
 
   /// Emits outbound rejections and concurrent inbound merge resolutions.
   Stream<ConflictResolution> get conflicts => _conflictController.stream;
-  SyncOutbox get outbox => _outbox;
+  SyncOperationQueue get outbox => _outbox;
 
   /// Registers an adapter until Phase 3 generator output supplies the registry.
   void register<T>(SyncAdapter<T> adapter) {
@@ -84,13 +85,14 @@ class SyncEngine {
           previousState?.fieldMetadata ?? const {},
           clock,
           nodeId),
+      serializedEntity: adapter.toJson(entity),
       entity: entity,
     );
     await _storage.saveStored(adapter.modelType, id, entity as Object,
         operation.vectorClock, nodeId, operation.fieldMetadata);
     _rollbacks[operation] = _Rollback(
         previousState, adapter.modelType, operation.vectorClock, nodeId);
-    _outbox.queue(operation);
+    await _outbox.queue(operation);
   }
 
   /// Saves [entity] locally, then queues an update for a later sync.
@@ -110,13 +112,14 @@ class SyncEngine {
           previousState?.fieldMetadata ?? const {},
           clock,
           nodeId),
+      serializedEntity: adapter.toJson(entity),
       entity: entity,
     );
     await _storage.saveStored(adapter.modelType, id, entity as Object,
         operation.vectorClock, nodeId, operation.fieldMetadata);
     _rollbacks[operation] = _Rollback(
         previousState, adapter.modelType, operation.vectorClock, nodeId);
-    _outbox.queue(operation);
+    await _outbox.queue(operation);
   }
 
   /// Writes a local tombstone and queues a delete operation.
@@ -134,13 +137,31 @@ class SyncEngine {
         adapter.modelType, id, operation.vectorClock, nodeId);
     _rollbacks[operation] = _Rollback(
         previousState, adapter.modelType, operation.vectorClock, nodeId);
-    _outbox.queue(operation);
+    await _outbox.queue(operation);
   }
 
   /// Performs one pull/push cycle and handles permanent optimistic failures.
   Future<void> sync() async {
+    final running = _syncFuture;
+    if (running != null) {
+      await running;
+      return;
+    }
+
+    final future = _runSync();
+    _syncFuture = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_syncFuture, future)) {
+        _syncFuture = null;
+      }
+    }
+  }
+
+  Future<void> _runSync() async {
+    final initialFailureCount = _outbox.failures.length;
     final batch = await _transport.pull(lastSyncToken: _lastSyncToken);
-    _lastSyncToken = batch.nextSyncToken;
     for (final operation in batch.operations) {
       await _applyIncoming(operation);
     }
@@ -150,6 +171,9 @@ class SyncEngine {
       await acknowledgementStorage
           .recordAcknowledgements(batch.acknowledgements);
       await acknowledgementStorage.pruneAcknowledgedFrontiers();
+    }
+    if (_outbox.failures.length == initialFailureCount) {
+      _lastSyncToken = batch.nextSyncToken;
     }
   }
 

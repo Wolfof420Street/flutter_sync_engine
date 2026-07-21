@@ -4,8 +4,6 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:sync_engine/sync_engine.dart';
 
-import 'task.dart';
-
 /// HTTP transport for the separate Shelf mock-server process.
 class TaskTransport implements SyncTransport {
   TaskTransport(this.baseUri);
@@ -61,7 +59,6 @@ class TaskTransport implements SyncTransport {
   }
 
   Map<String, Object?> _operationJson(SyncOperation operation) {
-    final entity = operation.entity;
     return <String, Object?>{
       'kind': operation is InsertOperation
           ? 'insert'
@@ -75,11 +72,8 @@ class TaskTransport implements SyncTransport {
       'fieldMetadata': operation.fieldMetadata.map(
         (key, value) => MapEntry(key, value.toJson()),
       ),
-      if (entity is Task)
-        'entity': const TaskSerializer().toSyncJson(
-          entity,
-          operation.fieldMetadata,
-        ),
+      if (operation.serializedEntity != null)
+        'entity': operation.serializedEntity,
     };
   }
 

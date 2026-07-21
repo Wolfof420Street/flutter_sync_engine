@@ -14,7 +14,7 @@ void main() {
   test('queues and flushes accepted operations', () async {
     final outbox = SyncOutbox();
     final transport = FakeSyncTransport();
-    outbox.queue(operation());
+    await outbox.queue(operation());
 
     await outbox.flush(transport);
 
@@ -36,7 +36,7 @@ void main() {
       Exception('offline')
     ]);
     final queued = operation();
-    outbox.queue(queued);
+    await outbox.queue(queued);
 
     await outbox.flush(transport);
 
@@ -58,12 +58,32 @@ void main() {
       ]),
     ]);
     final outbox = SyncOutbox();
-    outbox.queue(original);
+    await outbox.queue(original);
 
     await outbox.flush(transport);
 
     expect(transport.pushes, hasLength(2));
     expect(transport.pushes.last.single.vectorClock, updatedClock);
     expect(outbox.pendingOperations, isEmpty);
+  });
+
+  test('keeps the operation pending when the transport response is malformed',
+      () async {
+    final original = operation();
+    final outbox = SyncOutbox(
+      maxAttempts: 2,
+      delay: (_) async {},
+    );
+    await outbox.queue(original);
+    final transport = FakeSyncTransport(
+      responses: [const SyncResult(), const SyncResult()],
+    );
+
+    await outbox.flush(transport);
+
+    expect(outbox.pendingOperations, isEmpty);
+    expect(outbox.deadLetters, [original]);
+    expect(outbox.failures.single.kind, SyncFailureKind.deadLetter);
+    expect(transport.pushes, hasLength(2));
   });
 }

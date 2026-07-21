@@ -1,52 +1,84 @@
 # SyncForge
 
-> Production-grade offline synchronization for Flutter.
+> Offline-first synchronization for Flutter apps that need durable writes, deterministic conflict resolution, and generated adapters.
 
-SyncForge is a backend-agnostic offline synchronization framework for Flutter applications. It combines CRDT-based conflict resolution, vector clocks, optimistic local updates, code generation, and pluggable storage and transport adapters to simplify building resilient offline-first applications.
+[![CI](https://img.shields.io/github/actions/workflow/status/Wolfof420Street/flutter_sync_engine/test.yml?branch=main)](https://github.com/Wolfof420Street/flutter_sync_engine/actions/workflows/test.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![pub.dev core](https://img.shields.io/pub/v/sync_engine.svg)](https://pub.dev/packages/sync_engine)
+
+SyncForge is a backend-agnostic offline synchronization framework for Flutter applications. It combines CRDT-based conflict resolution, vector clocks, optimistic local updates, code generation, and pluggable storage and transport adapters to simplify building resilient offline-first products.
 
 The synchronization engine is implemented in pure Dart, making it portable, testable, and independent of Flutter.
 
+## Project Links
+
+- [Core package](packages/sync_engine/README.md)
+- [Drift adapter](packages/sync_engine_drift/README.md)
+- [Generator package](packages/sync_engine_generator/README.md)
+- [Architecture](ARCHITECTURE.md)
+- [Sync protocol](docs/SYNC_PROTOCOL.md)
+- [Contributing](CONTRIBUTING.md)
+- [Support policy](SUPPORTED_VERSIONS.md)
+- [Security](SECURITY.md)
+
 ---
 
-## Features
+## Hero
 
-- Offline-first architecture
-- Pure Dart CRDT engine
-- Vector clock–based causal ordering
-- Per-field conflict resolution
-- Optimistic writes with automatic rollback
-- Durable outbox with retry and dead-letter handling
-- Tombstone-based deletion support
-- Annotation-driven code generation
-- Drift storage adapter
-- Backend-agnostic transport abstraction
-- Comprehensive property-based and convergence testing
+```mermaid
+flowchart TD
+  Model["@Syncable model"] --> Generator["Generated adapter + serializer"]
+  Generator --> Engine["SyncEngine"]
+  Engine --> Storage["SyncStorage / Drift"]
+  Engine --> Transport["SyncTransport"]
+  Transport --> Backend["Backend API"]
+  Backend --> Engine
+```
+
+---
+
+## Why SyncForge
+
+SyncForge is designed for teams that want the control of a custom sync stack without the maintenance burden of building one from scratch.
+
+- Durable local writes that survive restarts
+- Deterministic merge behavior for concurrent edits
+- A generated adapter layer instead of handwritten serialization glue
+- A Drift-backed storage path for real offline persistence
+- A transport abstraction that works with REST-style backends and custom APIs
+- Clear protocol docs so sync behavior is explainable, testable, and supportable
 
 ---
 
 ## Architecture
 
 ```text
-                    @Syncable Models
-                           │
-                           ▼
-                 Generated Sync Adapters
-                           │
-                           ▼
-                      SyncEngine
-                    /            \
-                   /              \
-          SyncStorage        SyncTransport
-         (Drift, etc.)      (REST, GraphQL, ...)
+@Syncable models
+      │
+      ▼
+Generated adapters and serializers
+      │
+      ▼
+SyncEngine
+   ├── SyncStorage      → Drift-backed persistence
+   └── SyncTransport    → REST, GraphQL, custom backend
 ```
 
 SyncForge separates synchronization logic from storage and networking, allowing applications to integrate with existing backends without changing the synchronization engine.
 
 ---
 
+## Who It Is For
+
+- Solo Flutter developers who need offline writes without inventing a sync protocol.
+- Product teams building note, task, field service, or collaboration apps.
+- Enterprise apps that need deterministic recovery, auditability, and restart-safe persistence.
+
+---
+
 ## Quick Start
 
-Define a synchronizable model:
+1. Define a synchronizable model:
 
 ```dart
 @Syncable()
@@ -64,14 +96,14 @@ class Todo {
 }
 ```
 
-Generate the synchronization code:
+2. Generate the synchronization code:
 
 ```bash
 flutter pub get
-dart run build_runner build --delete-conflicting-outputs
+flutter pub run build_runner build --delete-conflicting-outputs
 ```
 
-Create a `SyncEngine` instance:
+3. Create a `SyncEngine` instance:
 
 ```dart
 final sync = SyncEngine(
@@ -83,6 +115,23 @@ final sync = SyncEngine(
   },
 );
 ```
+
+---
+
+## Features
+
+- Offline-first architecture
+- Pure Dart CRDT engine
+- Vector clock–based causal ordering
+- Per-field conflict resolution
+- Optimistic writes with automatic rollback
+- Durable outbox with retry and dead-letter handling via the Drift adapter
+- Tombstone-based deletion support
+- Annotation-driven code generation
+- Generator-time rejection of unsupported custom merge strategies
+- Drift storage adapter
+- Backend-agnostic transport abstraction
+- Comprehensive property-based and convergence testing
 
 ---
 
@@ -99,6 +148,7 @@ Includes:
 - Synchronization protocol
 - Optimistic write pipeline
 - Conflict resolution
+- Serialized sync execution and cursor validation
 - Public synchronization API
 
 ---
@@ -114,6 +164,8 @@ Generates:
 - Merge logic
 - Adapter registry
 
+Unsupported `ConflictType.custom` fields fail generation instead of crashing at runtime.
+
 ---
 
 ### `sync_engine_drift`
@@ -125,19 +177,27 @@ A production-ready Drift storage implementation featuring:
 - Acknowledgements
 - Frontier pruning
 - Schema versioning
+- Durable outbox persistence with retry metadata and dead letters
 
 ---
 
 ## Examples
 
-The repository includes several example applications.
+The repository includes several example applications, each optimized for a different stage of adoption.
 
 | Example | Description |
 |---------|-------------|
-| `minimal_app` | Smallest possible integration |
-| `notes_app` | Persistent offline note-taking application |
-| `task_manager` | Full-featured synchronization example |
+| `minimal_app` | Smallest possible integration path |
+| `notes_app` | External consumer example with persisted local state |
+| `task_manager` | Full-featured production-style synchronization example |
 | `conflict_playground` | Interactive visualization of concurrent conflict resolution |
+
+Start with:
+
+1. [minimal_app](example/minimal_app/README.md) for a five-minute integration.
+2. [notes_app](example/notes_app/README.md) for a consumer-owned app structure.
+3. [task_manager](example/task_manager/README.md) for transport and retry behavior.
+4. [conflict_playground](example/conflict_playground/README.md) for a live merge demo.
 
 ---
 
@@ -160,9 +220,36 @@ Further details are available in:
 
 ---
 
+## Performance
+
+SyncForge is designed to scale from a handful of offline writes to large queues and repeated reconnect cycles. The repository validates the sync path, generator output, durable outbox behavior, and example-app workflows in CI.
+
+For production evaluation, review:
+
+- `packages/sync_engine/test/`
+- `packages/sync_engine_drift/test/`
+- `packages/sync_engine_generator/test/`
+- `example/task_manager/test/`
+- `example/notes_app/test/`
+
+---
+
+## Comparison
+
+| Capability | SyncForge | Hand-rolled sync | Backend SDK only | Local cache only |
+|---|---|---|---|---|
+| Offline writes | Yes | Usually partial | Usually no | Yes |
+| Durable outbox | Yes | Rarely | No | No |
+| Deterministic conflict handling | Yes | Varies | Varies | No |
+| Generated adapters | Yes | No | No | No |
+| Drift-backed persistence | Yes | Possible | No | Yes |
+| Protocol documentation | Yes | Usually no | Usually no | No |
+
+---
+
 ## Testing
 
-The project includes extensive automated verification.
+The project includes extensive automated verification:
 
 - Unit tests
 - Integration tests
@@ -189,19 +276,19 @@ melos run test
 
 ---
 
-## Project Status
+## FAQ
 
-SyncForge is currently under active development.
+**Does SyncForge replace my backend?**
+No. It coordinates local synchronization and transport, but your backend still owns authentication, authorization, and server-side data rules.
 
-Current capabilities include:
+**Can I use a custom backend?**
+Yes. Implement `SyncTransport` for your API shape.
 
-- Pure Dart synchronization engine
-- Drift persistence
-- Annotation-based code generation
-- REST-style transport abstraction
-- External consumer validation
+**Do I have to use Drift?**
+No. Drift is the production storage adapter included in this repository, but the core engine is storage-agnostic.
 
-Future work includes additional storage adapters, transport integrations, background synchronization, and encryption support.
+**Can I customize conflict resolution?**
+Yes for supported strategies. Unsupported custom merge behavior is rejected at generation time rather than failing at runtime.
 
 ---
 
@@ -212,6 +299,26 @@ Future work includes additional storage adapters, transport integrations, backgr
 - `docs/CONTRIBUTING.md` — Contribution guidelines
 - `docs/RELEASE_CHECKLIST.md` — Release process
 - `packages/sync_engine_drift/DESIGN.md` — Drift implementation details
+- `SUPPORTED_VERSIONS.md` — Supported runtime and maintenance policy
+- `SECURITY.md` — Security reporting guidance
+- `CODE_OF_CONDUCT.md` — Community standards
+
+---
+
+## Need Help?
+
+If you are evaluating SyncForge for a production app:
+
+1. Start with the [minimal example](example/minimal_app/README.md).
+2. Read the [sync protocol](docs/SYNC_PROTOCOL.md).
+3. Review the [task manager example](example/task_manager/README.md) for HTTP transport behavior.
+4. See [BACKEND_INTEGRATION.md](docs/BACKEND_INTEGRATION.md) for adapter boundaries.
+
+---
+
+## Roadmap
+
+The current codebase is production-ready for the supported core workflow. Future work centers on additional storage adapters, transport integrations, observability hooks, and richer enterprise deployment guidance.
 
 ---
 

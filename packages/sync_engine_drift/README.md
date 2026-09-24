@@ -17,7 +17,14 @@ The adapter stores all synced entity types in a shared `sync_entity_table`:
 - `last_modified` is an integer Unix timestamp.
 
 It also persists `replica_acknowledgements` and `lww_frontier_entries`. A
-causally stale `save` is rejected rather than overwriting a newer durable row.
+causally stale saves and deletes are rejected rather than overwriting a newer
+durable row.
+
+The entity write path stores one materialized winner per LWW field. Frontier
+rows are an application-managed acknowledgement-pruning hook; ordinary saves,
+updates, merges, and deletes do not create them automatically. This keeps the
+storage model aligned with the MVP contract documented in [DESIGN.md](DESIGN.md),
+which does not persist multi-way LWW frontiers.
 
 `DriftSyncOutbox` stores pending operations in the same database. It persists
 serialized payloads, retry counts, next-attempt timestamps, last errors, and
@@ -38,7 +45,8 @@ materialization use the same deterministic tie-break rule.
 
 ## Drift generation and schema manifests
 
-Enable the generator's Drift output in the consuming package's `build.yaml`:
+Enable the generator's Drift schema validation and optional table declaration in
+the consuming package's `build.yaml`:
 
 ```yaml
 targets:
@@ -49,6 +57,12 @@ targets:
           generate_drift_table: true
           schema_manifest: lib/sync_engine_schema.json
 ```
+
+Generated tables are application-side Drift declarations. `DriftSyncStorage`
+continues to use the shared `sync_entity_table`, so generated tables are not
+registered by `SyncDriftDatabase` or used for synchronization automatically.
+Applications that need the declarations must register them in their own Drift
+database.
 
 For a first build, temporarily set `bootstrap_schema: true`, then create and
 review the checked-in baseline with `bootstrap_schema`. Later additive field

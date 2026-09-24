@@ -69,7 +69,7 @@ class DriftSyncStorage implements SyncStorage, SyncAcknowledgementStorage {
   @override
   Future<void> delete<T>(String id, VectorClock clock, String nodeId) async {
     final adapter = _adapter<T>();
-    await _deleteByType(adapter.entityType, id, clock, nodeId);
+    await _deleteByType(adapter.entityType, id, clock, nodeId, const {});
   }
 
   @override
@@ -107,7 +107,8 @@ class DriftSyncStorage implements SyncStorage, SyncAcknowledgementStorage {
   Future<void> deleteStored(
       Type type, String id, VectorClock clock, String nodeId,
       [Map<String, FieldLwwMetadata> fieldMetadata = const {}]) async {
-    await _deleteByType(_adapterByType(type).entityType, id, clock, nodeId);
+    await _deleteByType(
+        _adapterByType(type).entityType, id, clock, nodeId, fieldMetadata);
   }
 
   @override
@@ -187,6 +188,9 @@ class DriftSyncStorage implements SyncStorage, SyncAcknowledgementStorage {
     }
   }
 
+  /// Stores an application-managed LWW frontier entry for acknowledgement
+  /// pruning. Normal entity writes persist the materialized field winners in
+  /// [SyncEntityTable]; they do not create frontier rows automatically.
   Future<void> persistFrontierEntry(String entityType, String entityId,
           String nodeId, VectorClock timestamp) =>
       _database.customStatement(
@@ -260,13 +264,26 @@ class DriftSyncStorage implements SyncStorage, SyncAcknowledgementStorage {
     );
   }
 
-  Future<void> _deleteByType(
-          String entityType, String id, VectorClock clock, String nodeId) =>
-      _database.customStatement(
+  Future<void> _deleteByType(String entityType, String id, VectorClock clock,
+      String nodeId, Map<String, FieldLwwMetadata> fieldMetadata) async {
+    final existing = await _row(entityType, id);
+    if (existing != null &&
+        VectorClock.fromJson(jsonDecode(existing.read<String>('vector_clock'))
+                as Map<String, dynamic>)
+            .happenedAfter(clock)) {
+      return;
+    }
+    await _database.customStatement(
         'INSERT INTO sync_entity_table (entity_type,id,payload,vector_clock,field_metadata,node_id,deleted,last_modified) VALUES (?,?,\'{}\',?,?,?,1,strftime(\'%s\',\'now\')) '
         'ON CONFLICT(entity_type,id) DO UPDATE SET vector_clock=excluded.vector_clock,field_metadata=excluded.field_metadata,node_id=excluded.node_id,deleted=1,last_modified=excluded.last_modified',
-        [entityType, id, jsonEncode(clock.toJson()), '{}', nodeId],
-      );
+        [
+          entityType,
+          id,
+          jsonEncode(clock.toJson()),
+          _encodeMetadata(fieldMetadata),
+          nodeId
+        ]);
+  }
 
   Map<String, FieldLwwMetadata> _decodeMetadata(String json) {
     final values = jsonDecode(json) as Map<String, dynamic>;

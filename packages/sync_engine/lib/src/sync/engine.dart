@@ -292,6 +292,8 @@ class SyncEngine {
 
   Future<void> dispose() async {
     await _notificationSubscription.cancel();
+    final running = _syncFuture;
+    if (running != null) await running;
     await _conflictController.close();
     await _outbox.dispose();
   }

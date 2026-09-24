@@ -232,6 +232,7 @@ class ConflictPlaygroundController {
   late final PlaygroundTransport _transportA;
   late final PlaygroundTransport _transportB;
   late final SyncEngine _engineA;
+  Future<void>? _initialization;
   late final SyncEngine _engineB;
   bool synced = false;
 
@@ -245,7 +246,9 @@ class ConflictPlaygroundController {
   String get mergedTitle => synced ? deviceATask?.title ?? '—' : '—';
   String get mergedDetails => synced ? deviceATask?.details ?? '—' : '—';
 
-  Future<void> initialize() async {
+  Future<void> initialize() => _initialization ??= _initialize();
+
+  Future<void> _initialize() async {
     await _storageA.initialize();
     await _storageB.initialize();
     await _engineA.insert(const PlaygroundTask(

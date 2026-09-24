@@ -73,3 +73,18 @@ jobs:
       - name: Test external notes consumer
         working-directory: example/notes_app
         run: flutter test -r expanded
+
+      - name: Analyze valid generator fixtures
+        working-directory: packages/sync_engine_generator
+        run: |
+          for fixture in test/fixtures/good test/fixtures/drift_bootstrap test/fixtures/drift_additive; do
+            (cd "$fixture" && dart analyze)
+          done
+
+      - name: Test minimal consumer
+        working-directory: example/minimal_app
+        run: flutter test -r expanded
+
+      - name: Test conflict playground
+        working-directory: example/conflict_playground
+        run: flutter test -r expanded

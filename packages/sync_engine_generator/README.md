@@ -13,7 +13,7 @@ targets:
     builders:
       sync_engine_generator|syncable:
         options:
-          generate_drift_table: true # only in packages that depend on Drift
+          generate_drift_table: true # validate schema and emit an optional Drift table declaration
           schema_manifest: lib/sync_engine_schema.json # checked in; additive-only baseline
         generate_for:
           - lib/**.dart
@@ -38,6 +38,12 @@ dart run sync_engine_generator:update_schema lib/sync_engine_schema.json Task id
 
 The command accepts additive field sets only; a removed or renamed baseline
 field is rejected.
+
+The generated Drift table is an application-side declaration for consumers
+that want a typed table for their own queries. It is not the runtime table used
+by `sync_engine_drift`, which always persists synchronized entities in its
+shared `sync_entity_table`. Register generated tables in the consuming
+application's own `@DriftDatabase` if needed.
 
 If a field uses `@ConflictStrategy(ConflictType.custom)`, generation fails
 explicitly. That unsupported merge path no longer defers to a runtime crash.

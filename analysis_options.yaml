@@ -1,6 +1,8 @@
 include: package:lints/recommended.yaml
 
 analyzer:
+  # Negative generator fixtures intentionally contain invalid source and are
+  # validated by their dedicated build-failure tests instead.
   exclude:
     - packages/sync_engine_generator/test/fixtures/**
 

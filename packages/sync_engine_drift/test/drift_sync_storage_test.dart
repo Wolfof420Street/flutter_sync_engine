@@ -79,6 +79,69 @@ void main() {
     await database.close();
   });
 
+  test('rejects an older delete instead of regressing durable state', () async {
+    final database = SyncDriftDatabase(NativeDatabase.memory());
+    final storage =
+        DriftSyncStorage(database, adapters: {_Item: _ItemAdapter()});
+    await storage.save(
+        'one', const _Item('one', 'new'), VectorClock({'a': 2}), 'a');
+    await storage.delete<_Item>('one', VectorClock({'a': 1}), 'a');
+    expect(await storage.load<_Item>('one'), const _Item('one', 'new'));
+    final stored = await storage.loadStored(_Item, 'one');
+    expect(stored?.deleted, isFalse);
+    await database.close();
+  });
+
+  test('accepts a newer delete and persists its tombstone', () async {
+    final database = SyncDriftDatabase(NativeDatabase.memory());
+    final storage =
+        DriftSyncStorage(database, adapters: {_Item: _ItemAdapter()});
+    await storage.save(
+        'one', const _Item('one', 'old'), VectorClock({'a': 1}), 'a');
+    await storage.delete<_Item>('one', VectorClock({'a': 2}), 'a');
+    expect(await storage.load<_Item>('one'), isNull);
+    final stored = await storage.loadStored(_Item, 'one');
+    expect(stored?.deleted, isTrue);
+    expect(stored?.clock, VectorClock({'a': 2}));
+    await database.close();
+  });
+
+  test('equal-clock delete replaces the existing value', () async {
+    final database = SyncDriftDatabase(NativeDatabase.memory());
+    final storage =
+        DriftSyncStorage(database, adapters: {_Item: _ItemAdapter()});
+    final clock = VectorClock({'a': 1});
+    await storage.save('one', const _Item('one', 'value'), clock, 'a');
+    await storage.delete<_Item>('one', clock, 'a');
+    expect(await storage.load<_Item>('one'), isNull);
+    await database.close();
+  });
+
+  test('preserves non-empty tombstone field metadata', () async {
+    final database = SyncDriftDatabase(NativeDatabase.memory());
+    final storage =
+        DriftSyncStorage(database, adapters: {_Item: _ItemAdapter()});
+    final metadata = {
+      'value': FieldLwwMetadata(timestamp: VectorClock({'a': 2}), nodeId: 'a')
+    };
+    await storage.deleteStored(
+        _Item, 'one', VectorClock({'a': 2}), 'a', metadata);
+    final stored = await storage.loadStored(_Item, 'one');
+    expect(stored?.fieldMetadata, metadata);
+    await database.close();
+  });
+
+  test('preserves empty tombstone field metadata', () async {
+    final database = SyncDriftDatabase(NativeDatabase.memory());
+    final storage =
+        DriftSyncStorage(database, adapters: {_Item: _ItemAdapter()});
+    await storage
+        .deleteStored(_Item, 'one', VectorClock({'a': 1}), 'a', const {});
+    final stored = await storage.loadStored(_Item, 'one');
+    expect(stored?.fieldMetadata, isEmpty);
+    await database.close();
+  });
+
   test(
       'prunes a concurrent frontier only after the last configured replica acknowledges',
       () async {

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- Add a copy-pasteable onboarding example for database and storage lifecycle
+	setup with generated adapters.
+
 ## Unreleased
 
 - Add `DriftSyncOutbox` with durable queue persistence, retry metadata, dead letters, and restart recovery.

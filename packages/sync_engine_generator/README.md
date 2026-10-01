@@ -5,6 +5,59 @@
 `build_runner` generator for `@Syncable` entities. It emits sync models,
 serializers, CRDT-backed adapters, and registration helpers for `sync_engine`.
 
+## Getting started
+
+In a Flutter application, add the runtime package and the generator as a
+development dependency:
+
+```sh
+flutter pub add sync_engine
+flutter pub add --dev build_runner sync_engine_generator
+```
+
+Put the annotated model in its own library and include the generated part:
+
+```dart
+import 'package:sync_engine/sync_engine.dart';
+
+part 'task.sync.dart';
+
+@Syncable()
+class Task {
+  const Task({required this.id, required this.title});
+
+  @Id()
+  final String id;
+
+  @ConflictStrategy(ConflictType.lastWriteWins)
+  final String title;
+}
+```
+
+The `part 'task.sync.dart';` directive is required. Create `build.yaml` at
+the application root so the builder runs for the model:
+
+```yaml
+targets:
+  $default:
+    builders:
+      sync_engine_generator|syncable:
+        generate_for:
+          - lib/**.dart
+```
+
+Generate the adapter with:
+
+```sh
+dart run build_runner build --delete-conflicting-outputs
+```
+
+The build creates `TaskSyncAdapter`, which can be passed to
+`SyncEngine(adapters: {Task: const TaskSyncAdapter()})`. The engine still
+requires application-provided `SyncStorage` and `SyncTransport`
+implementations; [`sync_engine_drift`](https://pub.dev/packages/sync_engine_drift)
+provides durable storage.
+
 Add this to a consuming package's `build.yaml`:
 
 ```yaml

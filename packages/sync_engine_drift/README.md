@@ -6,6 +6,48 @@ Drift persistence adapter for `sync_engine`. It provides `DriftSyncStorage`, a
 `SyncStorage` implementation for optimistic local entities, tombstones, and
 durable replica acknowledgements.
 
+## Getting started
+
+Add the runtime, Drift adapter, generator, and build tools to a Flutter
+application:
+
+```sh
+flutter pub add sync_engine sync_engine_drift drift sqlite3_flutter_libs
+flutter pub add --dev build_runner sync_engine_generator drift_dev
+```
+
+Generate an adapter using the setup in the
+[`sync_engine_generator` README](https://pub.dev/packages/sync_engine_generator),
+then create the database and storage:
+
+```dart
+import 'package:drift/native.dart';
+import 'package:sync_engine/sync_engine.dart';
+import 'package:sync_engine_drift/sync_engine_drift.dart';
+
+final database = SyncDriftDatabase(NativeDatabase.memory());
+final storage = DriftSyncStorage(
+  database,
+  adapters: {Task: const TaskSyncAdapter()},
+);
+
+final sync = SyncEngine(
+  storage: storage,
+  transport: transport,
+  nodeId: 'device-a',
+  adapters: {Task: const TaskSyncAdapter()},
+);
+
+await storage.initialize();
+await sync.insert(const Task(id: 'task-1', title: 'Sync me'));
+```
+
+`NativeDatabase.memory()` is useful for a smoke test. For production, pass a
+file-backed Drift executor so the database survives process restarts, and call
+`await database.close()` during application shutdown. The generated adapter
+must be registered in both places when using `DriftSyncStorage` and
+`SyncEngine`.
+
 ## Storage model
 
 The adapter stores all synced entity types in a shared `sync_entity_table`:

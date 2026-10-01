@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- Expand onboarding documentation with hosted installation, code generation,
+  `SyncEngine` setup, and storage guidance.
+
 ## Unreleased
 
 - Serialize sync execution, coalesce concurrent sync calls, and gate cursor advancement on successful cycles.
